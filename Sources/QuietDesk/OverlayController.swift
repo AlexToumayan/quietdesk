@@ -150,9 +150,14 @@ final class OverlayController: DesktopSurfaceDelegate {
     var listingFailed: Bool { model?.listingFailed ?? false }
     var expandedStackTitles: Set<String> { expandedStacks }
 
+    /// The window server's on-screen list lags a window ordering by a moment, so read it after the
+    /// current turn of the run loop; otherwise the trace shows the previous generation of windows.
     private func traceWindows(_ what: String) {
         guard DebugLog.enabled else { return }
-        DebugLog.log("\(what): \(DebugLog.windowOrder(icons: windows, shields: shields))")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            guard let self else { return }
+            DebugLog.log("\(what): \(DebugLog.windowOrder(icons: self.windows, shields: self.shields))")
+        }
     }
 
     private func reloadModel() {
