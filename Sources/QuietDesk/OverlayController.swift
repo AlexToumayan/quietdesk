@@ -1,0 +1,387 @@
+import AppKit
+import os
+
+/// Owns one shield window and one icon window per screen, plus the model, layout, expanded
+/// Stacks, Finder positions (manual layouts), thumbnail and iCloud-status hookups and the
+/// change observers. Everything here is torn down completely when the utility is disabled.
+final class OverlayController: DesktopSurfaceDelegate {
+    private let log = Logger(subsystem: "dev.quietdesk.QuietDesk", category: "overlay")
+    private(set) var windows: [OverlayWindow] = []     // icon windows (one per screen)
+    private(set) var shields: [OverlayWindow] = []     // full-screen shield windows (one per screen)
+    private(set) var views: [DesktopView] = []
+    private var shieldViews: [ShieldView] = []
+    private var watcher: DesktopWatcher?
+    private var workspaceObservers: [NSObjectProtocol] = []
+    private var defaultObservers: [NSObjectProtocol] = []
+    private(set) var prefs = FinderDesktopPrefs.load()
+    private(set) var model: DesktopModel?
+    private var visible = false
+    private var expandedStacks = Set<String>()
+    private var finderPositions: [URL: CGPoint] = [:]
+    private var positionsRequested = false
+    private var positionsGeneration = 0
+    private var localOverrides: [URL: (point: CGPoint, generation: Int)] = [:]
+    private var pendingWrites = 0
+    private var positionsUnavailable = false
+    private var lastCloudStatus: [URL: CloudStatus] = [:]
+    private var cloudMonitor: CloudStatusMonitor?
+    private var knownModificationDates: [URL: Date] = [:]
+    private let settings = Settings.shared
+    /// Provided by the app delegate: Sort By / Stacks / Labels submenus for the desktop context menu.
+    var menuExtrasProvider: (() -> [NSMenuItem])?
+
+    var labelMode: LabelMode {
+        didSet { views.forEach { $0.labelMode = labelMode } }
+    }
+
+    init(labelMode: LabelMode) {
+        self.labelMode = labelMode
+    }
+
+    /// Builds the model and the windows without showing anything.
+    func prepare() {
+        reloadModel()
+        makeWindows()
+        ThumbnailCache.shared.onReady = { [weak self] url in self?.views.forEach { $0.invalidate(url: url) } }
+    }
+
+    func show() {
+        visible = true
+        shields.forEach { $0.orderFrontRegardless() }
+        windows.forEach { $0.orderFrontRegardless() }   // icon windows above their shields
+    }
+
+    /// "Desktop Items › Hidden": the icons go away but the shields stay, so wallpaper clicks
+    /// still never reach the system's click-catcher (which would re-show Finder's icons).
+    func hide() {
+        visible = false
+        windows.forEach { $0.orderOut(nil) }
+        shields.forEach { $0.orderFrontRegardless() }
+    }
+
+    func startWatching() {
+        watcher = DesktopWatcher(url: DesktopModel.desktopURL) { [weak self] in self?.reloadAndRelayout() }
+        let wc = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.didMountNotification, NSWorkspace.didUnmountNotification] {
+            workspaceObservers.append(wc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in self?.reloadAndRelayout() })
+        }
+        defaultObservers.append(NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in self?.rebuildWindows() })
+        let monitor = CloudStatusMonitor(directory: DesktopModel.desktopURL)
+        monitor.onChange = { [weak self] in self?.cloudStatusChanged() }
+        monitor.start()
+        cloudMonitor = monitor
+    }
+
+    func stop() {
+        hide()
+        watcher = nil
+        cloudMonitor?.stop(); cloudMonitor = nil
+        workspaceObservers.forEach { NSWorkspace.shared.notificationCenter.removeObserver($0) }
+        defaultObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        workspaceObservers = []; defaultObservers = []
+        windows.forEach { $0.close() }
+        shields.forEach { $0.close() }
+        windows = []; shields = []; views = []; shieldViews = []; model = nil
+        ThumbnailCache.shared.cancelAll()
+        ThumbnailCache.shared.removeAll()
+        IconCache.shared.removeAll()
+    }
+
+    func reloadAndRelayout() {
+        reloadModel()
+        guard let model else { return }
+        let metrics = GridMetrics.from(prefs: prefs)
+        let layouts = layout(model, metrics: metrics)
+        guard layouts.count == views.count else { rebuildWindows(); return }
+        for ((window, view), layout) in zip(zip(windows, views), layouts) {
+            let region = Layout.windowRegion(for: layout, metrics: metrics)
+            window.setFrame(Layout.cocoaFrame(region, on: layout.screen), display: false)
+            view.setFrameSize(region.size)
+            view.metrics = metrics
+            view.cells = layout.cells.map { $0.shifted(by: region.origin) }
+        }
+        log.notice("relayout after desktop change: \(model.entries.count) entries")
+    }
+
+    func rebuildWindows() {
+        windows.forEach { $0.close() }
+        shields.forEach { $0.close() }
+        makeWindows()
+        if visible { show() } else { shields.forEach { $0.orderFrontRegardless() } }
+    }
+
+    var listingFailed: Bool { model?.listingFailed ?? false }
+
+    private func reloadModel() {
+        prefs = FinderDesktopPrefs.load()
+        model = DesktopModel.scan(prefs: prefs, settings: settings, expandedStacks: expandedStacks)
+        invalidateChangedItems()
+        if model?.isManual == true {
+            if finderSyncsPositions { requestFinderPositionsIfNeeded() } else { seedLocalPositionsIfNeeded() }
+        }
+    }
+
+    /// Only redraw the items whose iCloud status actually changed, and forget a "no thumbnail"
+    /// verdict when a cloud-only file has finished downloading.
+    private func cloudStatusChanged() {
+        guard let model, let monitor = cloudMonitor else { return }
+        var current: [URL: CloudStatus] = [:]
+        var changed: [URL] = []
+        func visit(_ item: DesktopItem) {
+            let s = monitor.status(for: item.url)
+            current[item.url] = s
+            if lastCloudStatus[item.url] != s { changed.append(item.url) }
+        }
+        for entry in model.entries {
+            switch entry {
+            case .item(let i): visit(i)
+            case .stack(let s): s.items.prefix(3).forEach(visit)
+            }
+        }
+        lastCloudStatus = current
+        for url in changed {
+            if current[url] == .current { ThumbnailCache.shared.invalidate(url) }
+            views.forEach { $0.forgetEligibility(of: url); $0.invalidate(url: url) }
+        }
+    }
+
+    /// Drops cached thumbnails/icons for items whose modification date changed or that disappeared,
+    /// so a replaced file (atomic save) gets a fresh preview. Everything else stays cached.
+    private func invalidateChangedItems() {
+        guard let model else { return }
+        var current: [URL: Date] = [:]
+        func visit(_ item: DesktopItem) { current[item.url] = item.dateModified }
+        for entry in model.entries {
+            switch entry {
+            case .item(let i): visit(i)
+            case .stack(let s): s.items.forEach(visit)
+            }
+        }
+        for (url, date) in knownModificationDates where current[url] != date {
+            ThumbnailCache.shared.invalidate(url)
+            IconCache.shared.invalidate(url)
+            views.forEach { $0.forgetEligibility(of: url) }
+        }
+        knownModificationDates = current
+    }
+
+    /// Finder is the source and sink of icon positions only while Finder's OWN desktop is
+    /// manually arranged; otherwise its stored positions are stale (FEASIBILITY E2) and writing
+    /// them would be meaningless. When QuietDesk is set to "None (Finder Positions)" on a sorted
+    /// Finder desktop, positions live in QuietDesk's own preferences instead.
+    private var finderSyncsPositions: Bool { prefs.arrangeBy == .none || prefs.arrangeBy == .grid }
+
+    private var localPositions: [URL: CGPoint] {
+        get {
+            let raw = Settings.defaults.dictionary(forKey: "localPositions") as? [String: [Double]] ?? [:]
+            return raw.reduce(into: [:]) { out, kv in
+                if kv.value.count == 2 { out[URL(fileURLWithPath: kv.key).standardizedFileURL] = CGPoint(x: kv.value[0], y: kv.value[1]) }
+            }
+        }
+        set {
+            let raw = newValue.reduce(into: [String: [Double]]()) { out, kv in out[kv.key.path] = [kv.value.x, kv.value.y] }
+            Settings.defaults.set(raw, forKey: "localPositions")
+        }
+    }
+
+    /// First switch to app-local manual mode: start from where the icons are right now (Finder's
+    /// sorted grid), like Finder does when Sort By is turned off.
+    private func seedLocalPositionsIfNeeded() {
+        guard let model, localPositions.isEmpty else { return }
+        var seeded: [URL: CGPoint] = [:]
+        let sortedModel = DesktopModel.scan(prefs: prefs, settings: Settings.shared, expandedStacks: [], now: Date(), forceArrangeBy: prefs.arrangeBy)
+        let metrics = GridMetrics.from(prefs: prefs)
+        for layout in Layout.compute(entries: sortedModel.entries, screens: NSScreen.screens, metrics: metrics) {
+            for cell in layout.cells {
+                guard let url = cell.entry.url?.standardizedFileURL else { continue }
+                seeded[url] = Layout.finderPoint(localIconCentre: NSPoint(x: cell.iconRect.midX, y: cell.iconRect.midY), on: layout.screen, screens: NSScreen.screens)
+            }
+        }
+        _ = model
+        localPositions = seeded
+    }
+
+    private func layout(_ model: DesktopModel, metrics: GridMetrics) -> [ScreenLayout] {
+        if model.isManual {
+            let positions = finderSyncsPositions ? finderPositions : localPositions
+            return Layout.computeManual(entries: model.entries, positions: positions, screens: NSScreen.screens, metrics: metrics, snapToGrid: model.arrangeBy == .grid)
+        }
+        return Layout.compute(entries: model.entries, screens: NSScreen.screens, metrics: metrics)
+    }
+
+    private func makeWindows() {
+        guard let model else { return }
+        let metrics = GridMetrics.from(prefs: prefs)
+        let layouts = layout(model, metrics: metrics)
+        windows = []; shields = []; views = []; shieldViews = []
+        for layout in layouts {
+            let shield = OverlayWindow(frame: layout.screen.frame, canBecomeKey: false)
+            let shieldView = ShieldView(frame: NSRect(origin: .zero, size: layout.screen.frame.size))
+            shieldView.delegate = self
+            shield.contentView = shieldView
+
+            let region = Layout.windowRegion(for: layout, metrics: metrics)
+            let window = OverlayWindow(frame: Layout.cocoaFrame(region, on: layout.screen))
+            let view = DesktopView(frame: NSRect(origin: .zero, size: region.size), metrics: metrics)
+            view.labelMode = labelMode
+            view.delegate = self
+            view.cells = layout.cells.map { $0.shifted(by: region.origin) }
+            view.bandHost = shieldView
+            shieldView.iconView = view
+            window.contentView = view
+
+            shields.append(shield); shieldViews.append(shieldView)
+            windows.append(window); views.append(view)
+        }
+    }
+
+    // MARK: - Manual layouts: positions from Finder
+
+    private func requestFinderPositionsIfNeeded() {
+        guard finderSyncsPositions, !positionsUnavailable, !positionsRequested else { return }
+        positionsRequested = true
+        let issued = positionsGeneration
+        FinderAutomation.readDesktopPositions { [weak self] result in
+            guard let self else { return }
+            self.positionsRequested = false
+            switch result {
+            case .success(var positions):
+                // Drags that happened while this read was in flight win over what Finder held then.
+                for (url, o) in self.localOverrides where o.generation >= issued { positions[url] = o.point }
+                self.localOverrides = self.localOverrides.filter { $0.value.generation >= issued }
+                self.finderPositions = positions
+                self.relayoutOnly()
+            case .failure(let error):
+                self.log.notice("Finder positions unavailable: \(String(describing: error))")
+                if case .notPermitted = error {
+                    self.positionsUnavailable = true
+                    DesktopMenus.showError("Icon positions need Finder", error.description + "\n\nUntil then QuietDesk arranges the desktop in a grid.")
+                }
+            }
+        }
+    }
+
+    private func relayoutOnly() {
+        guard let model else { return }
+        let metrics = GridMetrics.from(prefs: prefs)
+        let layouts = layout(model, metrics: metrics)
+        guard layouts.count == views.count else { rebuildWindows(); return }
+        for ((window, view), layout) in zip(zip(windows, views), layouts) {
+            let region = Layout.windowRegion(for: layout, metrics: metrics)
+            window.setFrame(Layout.cocoaFrame(region, on: layout.screen), display: false)
+            view.setFrameSize(region.size)
+            view.cells = layout.cells.map { $0.shifted(by: region.origin) }
+        }
+    }
+
+    // MARK: - DesktopSurfaceDelegate
+
+    var showsPreviews: Bool { prefs.showIconPreview }
+    var isManualLayout: Bool { model?.isManual ?? false }
+
+    private var keyReassertObserver: NSObjectProtocol?
+
+    func surfaceDidReceiveClick() {
+        guard settings.activateFinderOnDesktopClick else { NSApp.activate(ignoringOtherApps: true); return }
+        guard let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first, !finder.isActive,
+              let keyWindow = windows.first(where: { $0.isKeyWindow }) else { return }
+        // Bring Finder forward so the menu bar reads "Finder" as on the native desktop. Its
+        // activation completes asynchronously and may take key status away from our
+        // non-activating panel; if that happens within the next moment, take it back once.
+        if let o = keyReassertObserver { NotificationCenter.default.removeObserver(o) }
+        keyReassertObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: keyWindow, queue: .main) { [weak self, weak keyWindow] _ in
+            if let o = self?.keyReassertObserver { NotificationCenter.default.removeObserver(o); self?.keyReassertObserver = nil }
+            keyWindow?.makeKey()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+            if let o = self?.keyReassertObserver { NotificationCenter.default.removeObserver(o); self?.keyReassertObserver = nil }
+        }
+        finder.activate()
+    }
+
+    func surface(toggleStack stack: StackGroup) {
+        if expandedStacks.contains(stack.title) { expandedStacks.remove(stack.title) } else { expandedStacks.insert(stack.title) }
+        reloadAndRelayout()
+    }
+
+    func surface(reposition centres: [URL: NSPoint], on screen: NSScreen) {
+        var local = localPositions
+        for (url, centre) in centres {
+            let point = Layout.finderPoint(localIconCentre: centre, on: screen, screens: NSScreen.screens)
+            let key = url.standardizedFileURL
+            if finderSyncsPositions {
+                positionsGeneration += 1
+                localOverrides[key] = (point, positionsGeneration)
+                finderPositions[key] = point
+                pendingWrites += 1
+                FinderAutomation.writeDesktopPosition(point, for: url) { [weak self] error in
+                    guard let self else { return }
+                    self.pendingWrites -= 1
+                    if let error { self.log.notice("could not store position in Finder: \(String(describing: error))") }
+                    if self.pendingWrites == 0 { self.requestFinderPositionsIfNeeded() }   // re-sync once per batch of drags
+                }
+            } else {
+                local[key] = point
+            }
+        }
+        if !finderSyncsPositions { localPositions = local }
+        relayoutOnly()
+    }
+
+    func surfaceMenuExtras() -> [NSMenuItem] { menuExtrasProvider?() ?? [] }
+
+    func surface(cloudStatusFor url: URL) -> CloudStatus { cloudMonitor?.status(for: url) ?? .notInCloud }
+
+    func surfaceRequestsReload() { reloadAndRelayout() }
+
+    // MARK: - Diagnostics used by the command-line test flags
+
+    func layoutDescription() -> String {
+        guard let model else { return "no model" }
+        var out = "prefs: icon=\(Int(prefs.iconSize)) text=\(Int(prefs.textSize)) spacing=\(Int(prefs.gridSpacing)) arrangeBy=\(model.arrangeBy) groupBy=\(model.groupBy) stacks=\(model.stacksEnabled) manual=\(model.isManual)\n"
+        out += "entries: \(model.entries.count) (items scanned: \(model.itemCount))\n"
+        let metrics = GridMetrics.from(prefs: prefs)
+        for (si, layout) in self.layout(model, metrics: metrics).enumerated() {
+            let region = Layout.windowRegion(for: layout, metrics: metrics)
+            out += "screen \(si) \(layout.screen.localizedName) \(Int(layout.screen.frame.width))x\(Int(layout.screen.frame.height)) grid \(layout.columns)x\(layout.rows) cell \(Int(metrics.cellWidth))x\(Int(metrics.cellHeight)) used \(layout.cells.count) window region \(Int(region.minX)),\(Int(region.minY)) \(Int(region.width))x\(Int(region.height))\n"
+            for c in layout.cells {
+                let kind: String
+                switch c.entry {
+                case .stack(let s): kind = "STACK(\(s.items.count))"
+                case .item(let i): kind = i.isVolume ? "VOLUME" : (i.isFolder ? "folder" : (i.stackTitle != nil ? "in-stack" : "file"))
+                }
+                out += String(format: "  c%02d r%02d  icon@(%4d,%4d)  %@  %@\n", c.col, c.row, Int(c.iconRect.midX), Int(c.iconRect.midY), kind, c.entry.displayName)
+            }
+        }
+        return out
+    }
+
+    /// Renders one screen's overlay over a flat background into a PNG (for offline checks).
+    func renderPNG(screenIndex: Int, to url: URL, hover: Int?) throws {
+        guard screenIndex < views.count else { return }
+        let view = views[screenIndex]
+        let size = view.bounds.size
+        let scale: CGFloat = 2
+        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * scale), pixelsHigh: Int(size.height * scale),
+                                         bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                         colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return }
+        rep.size = size
+        guard let ctx = NSGraphicsContext(bitmapImageRep: rep) else { return }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = ctx
+        NSColor(calibratedRed: 0.38, green: 0.55, blue: 0.68, alpha: 1).setFill()
+        NSRect(origin: .zero, size: size).fill()
+        if let hover { view.simulateHover(hover) }
+        view.displayIgnoringOpacity(view.bounds, in: ctx)
+        NSGraphicsContext.restoreGraphicsState()
+        guard let data = rep.representation(using: .png, properties: [:]) else { return }
+        try data.write(to: url)
+    }
+
+    /// Expands a stack by title (used by --render for offline checks).
+    func expandStackForTesting(_ title: String) {
+        expandedStacks.insert(title)
+        reloadAndRelayout()
+    }
+}
