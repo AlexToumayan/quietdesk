@@ -1,0 +1,28 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and bundle
+        run: ./scripts/build-app.sh
+      - name: Self-test
+        run: .build/release/QuietDesk --self-test
+      - name: Zip
+        run: ditto -c -k --keepParent build/QuietDesk.app "QuietDesk-${GITHUB_REF_NAME#v}.zip"
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: QuietDesk-*.zip
+          body: |
+            Ad-hoc signed build (not notarized). After downloading: unzip, then open QuietDesk once via
+            System Settings › Privacy & Security › "Open Anyway", or build from source with
+            `./scripts/build-app.sh`. See README.md for permissions and recovery.
