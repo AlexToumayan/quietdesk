@@ -14,6 +14,12 @@ enum SelfTest {
         let m = GridMetrics.from(prefs: prefs)
         check("cell width 84 for icon 36 / spacing 26", Int(m.cellWidth) == 84)
         check("cell height 82 for icon 36 / text 12", Int(m.cellHeight) == 82)
+        var tight = ViewOptions.from(finder: prefs); tight.gridSpacing = 1
+        let mt = GridMetrics.from(options: tight)
+        check("tightest grid spacing gives 50 x 66 cells (second calibration point)", Int(mt.cellWidth) == 50 && Int(mt.cellHeight) == 66)
+        var right = ViewOptions.from(finder: prefs); right.labelOnBottom = false
+        let mr = GridMetrics.from(options: right)
+        check("label-right cells are wider than tall", mr.cellWidth > mr.cellHeight)
 
         // Layout fills from the top-right, down, then leftward, and continues on the next screen.
         let entries = (0..<30).map { i -> LayoutEntry in

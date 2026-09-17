@@ -18,22 +18,35 @@ keyboard focus; or always; or never. Disable or quit and the native desktop come
 Finder itself is untouched: Finder windows, Spotlight, the menu bar and every Finder feature keep
 working; only the icons drawn on the wallpaper are QuietDesk's.
 
-Menu (menu-bar icon: an open eye while QuietDesk is off, a slashed eye while it is enabled):
+Menu (menu-bar icon: an open eye while QuietDesk is off, a slashed eye while it is on):
 
 ```
 QuietDesk
-Enabled                                ✓
+Turn QuietDesk Off            (or: Turn QuietDesk On)
 Desktop Items ▸   Visible ✓ / Hidden
 Item Labels   ▸   Always Visible / On Hover ✓ / Hidden
 Sort By       ▸   Finder's Setting ✓ / None (Finder Positions) / Name / Kind / Date … / Size / Tags
 Stacks        ▸   Finder's Setting ✓ / Off / Group by Kind / Date … / Tags
+Show View Options…
 Launch at Login
 Bring Finder Forward on Desktop Click  ✓
 Open Desktop & Dock Settings…
 Reload Desktop
 About QuietDesk
-Quit and Restore Desktop               ⌘Q
+Quit QuietDesk                ⌘Q
 ```
+
+"Turn QuietDesk Off" restores the native desktop and keeps the menu-bar icon; "Quit" does the same
+and exits. Right-clicking the wallpaper while QuietDesk is on shows the same menu Finder shows
+there: New Folder, Get Info, Change Wallpaper, Use Stacks, Group Stacks By, Sort By, Item Labels,
+Show View Options, Paste.
+
+**View Options** (⌘J on the desktop, or from either menu) is QuietDesk's version of Finder's panel:
+Stack By, Sort By, icon size, grid spacing, text size, label position (bottom or right), Show item
+info, Show icon preview. Changes apply immediately to QuietDesk's desktop and never modify Finder's
+own settings; "Use Finder's Settings" re-imports Finder's current values (that is also the default
+until you change something). The grid geometry is calibrated to Finder at two spacing settings on
+macOS 26.6 and is linear in between.
 
 "Desktop Items › Hidden" hides the overlay too (nothing on the desktop); the label choice is remembered.
 "Enabled" off stops all observers and windows and restores the native desktop.
@@ -128,8 +141,10 @@ thumbnails are requested only for files that are fully local.
 
 ## Known limitations
 
-- Grid geometry is calibrated against Finder for icon size 36, text size 12, grid spacing 26 and may
-  be a few points off for other View Options (the order is always right).
+- Grid geometry is calibrated against Finder at icon size 36 / text size 12 for two grid-spacing
+  settings (the tightest and a mid value) and interpolated elsewhere; other icon sizes may sit a
+  few points off Finder's cells (the order is always right, and QuietDesk's own View Options let you
+  adjust the spacing to taste).
 - Manually arranged desktops (Sort By: None) were implemented from Finder's scripting dictionary and
   the module's calibration on this machine, but not yet validated on a desktop that actually uses
   manual positions.

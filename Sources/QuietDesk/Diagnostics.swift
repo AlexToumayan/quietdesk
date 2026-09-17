@@ -72,3 +72,12 @@ enum Diagnostics {
         print("rendered \(path)")
     }
 }
+
+extension NSFont {
+    /// The same font at another weight (used for the menu's Turn On/Off item).
+    func withWeight(_ weight: NSFont.Weight) -> NSFont {
+        let traits: [NSFontDescriptor.TraitKey: Any] = [.weight: weight]
+        let descriptor = fontDescriptor.addingAttributes([.traits: traits])
+        return NSFont(descriptor: descriptor, size: pointSize) ?? self
+    }
+}

@@ -14,6 +14,7 @@ final class OverlayController: DesktopSurfaceDelegate {
     private var workspaceObservers: [NSObjectProtocol] = []
     private var defaultObservers: [NSObjectProtocol] = []
     private(set) var prefs = FinderDesktopPrefs.load()
+    private(set) var options = Settings.shared.effectiveViewOptions(finder: FinderDesktopPrefs.load())
     private(set) var model: DesktopModel?
     private var visible = false
     private var expandedStacks = Set<String>()
@@ -43,6 +44,24 @@ final class OverlayController: DesktopSurfaceDelegate {
         reloadModel()
         makeWindows()
         ThumbnailCache.shared.onReady = { [weak self] url in self?.views.forEach { $0.invalidate(url: url) } }
+        ItemInfoCache.shared.onReady = { [weak self] url in self?.views.forEach { $0.invalidate(url: url) } }
+    }
+
+    /// View Options changed (icon size, spacing, text size, label position, info, previews):
+    /// recompute the grid from the current model without rescanning the folder.
+    func applyViewOptions() {
+        options = settings.effectiveViewOptions(finder: prefs)
+        guard let model else { return }
+        let metrics = GridMetrics.from(options: options)
+        let layouts = layout(model, metrics: metrics)
+        guard layouts.count == views.count else { rebuildWindows(); return }
+        for ((window, view), layout) in zip(zip(windows, views), layouts) {
+            let region = Layout.windowRegion(for: layout, metrics: metrics)
+            window.setFrame(Layout.cocoaFrame(region, on: layout.screen), display: false)
+            view.setFrameSize(region.size)
+            view.metrics = metrics
+            view.cells = layout.cells.map { $0.shifted(by: region.origin) }
+        }
     }
 
     func show() {
@@ -86,12 +105,13 @@ final class OverlayController: DesktopSurfaceDelegate {
         ThumbnailCache.shared.cancelAll()
         ThumbnailCache.shared.removeAll()
         IconCache.shared.removeAll()
+        ItemInfoCache.shared.removeAll()
     }
 
     func reloadAndRelayout() {
         reloadModel()
         guard let model else { return }
-        let metrics = GridMetrics.from(prefs: prefs)
+        let metrics = GridMetrics.from(options: options)
         let layouts = layout(model, metrics: metrics)
         guard layouts.count == views.count else { rebuildWindows(); return }
         for ((window, view), layout) in zip(zip(windows, views), layouts) {
@@ -115,6 +135,7 @@ final class OverlayController: DesktopSurfaceDelegate {
 
     private func reloadModel() {
         prefs = FinderDesktopPrefs.load()
+        options = settings.effectiveViewOptions(finder: prefs)
         model = DesktopModel.scan(prefs: prefs, settings: settings, expandedStacks: expandedStacks)
         invalidateChangedItems()
         if model?.isManual == true {
@@ -161,6 +182,7 @@ final class OverlayController: DesktopSurfaceDelegate {
         for (url, date) in knownModificationDates where current[url] != date {
             ThumbnailCache.shared.invalidate(url)
             IconCache.shared.invalidate(url)
+            ItemInfoCache.shared.invalidate(url)
             views.forEach { $0.forgetEligibility(of: url) }
         }
         knownModificationDates = current
@@ -191,7 +213,7 @@ final class OverlayController: DesktopSurfaceDelegate {
         guard let model, localPositions.isEmpty else { return }
         var seeded: [URL: CGPoint] = [:]
         let sortedModel = DesktopModel.scan(prefs: prefs, settings: Settings.shared, expandedStacks: [], now: Date(), forceArrangeBy: prefs.arrangeBy)
-        let metrics = GridMetrics.from(prefs: prefs)
+        let metrics = GridMetrics.from(options: options)
         for layout in Layout.compute(entries: sortedModel.entries, screens: NSScreen.screens, metrics: metrics) {
             for cell in layout.cells {
                 guard let url = cell.entry.url?.standardizedFileURL else { continue }
@@ -212,7 +234,7 @@ final class OverlayController: DesktopSurfaceDelegate {
 
     private func makeWindows() {
         guard let model else { return }
-        let metrics = GridMetrics.from(prefs: prefs)
+        let metrics = GridMetrics.from(options: options)
         let layouts = layout(model, metrics: metrics)
         windows = []; shields = []; views = []; shieldViews = []
         for layout in layouts {
@@ -264,7 +286,7 @@ final class OverlayController: DesktopSurfaceDelegate {
 
     private func relayoutOnly() {
         guard let model else { return }
-        let metrics = GridMetrics.from(prefs: prefs)
+        let metrics = GridMetrics.from(options: options)
         let layouts = layout(model, metrics: metrics)
         guard layouts.count == views.count else { rebuildWindows(); return }
         for ((window, view), layout) in zip(zip(windows, views), layouts) {
@@ -277,7 +299,8 @@ final class OverlayController: DesktopSurfaceDelegate {
 
     // MARK: - DesktopSurfaceDelegate
 
-    var showsPreviews: Bool { prefs.showIconPreview }
+    var showsPreviews: Bool { options.showIconPreview }
+    var showsItemInfo: Bool { options.showItemInfo }
     var isManualLayout: Bool { model?.isManual ?? false }
 
     private var keyReassertObserver: NSObjectProtocol?
@@ -339,9 +362,9 @@ final class OverlayController: DesktopSurfaceDelegate {
 
     func layoutDescription() -> String {
         guard let model else { return "no model" }
-        var out = "prefs: icon=\(Int(prefs.iconSize)) text=\(Int(prefs.textSize)) spacing=\(Int(prefs.gridSpacing)) arrangeBy=\(model.arrangeBy) groupBy=\(model.groupBy) stacks=\(model.stacksEnabled) manual=\(model.isManual)\n"
+        var out = "view options: icon=\(Int(options.iconSize)) text=\(Int(options.textSize)) spacing=\(Int(options.gridSpacing)) labelOnBottom=\(options.labelOnBottom) info=\(options.showItemInfo) previews=\(options.showIconPreview) (Finder: spacing=\(Int(prefs.gridSpacing))) arrangeBy=\(model.arrangeBy) groupBy=\(model.groupBy) stacks=\(model.stacksEnabled) manual=\(model.isManual)\n"
         out += "entries: \(model.entries.count) (items scanned: \(model.itemCount))\n"
-        let metrics = GridMetrics.from(prefs: prefs)
+        let metrics = GridMetrics.from(options: options)
         for (si, layout) in self.layout(model, metrics: metrics).enumerated() {
             let region = Layout.windowRegion(for: layout, metrics: metrics)
             out += "screen \(si) \(layout.screen.localizedName) \(Int(layout.screen.frame.width))x\(Int(layout.screen.frame.height)) grid \(layout.columns)x\(layout.rows) cell \(Int(metrics.cellWidth))x\(Int(metrics.cellHeight)) used \(layout.cells.count) window region \(Int(region.minX)),\(Int(region.minY)) \(Int(region.width))x\(Int(region.height))\n"

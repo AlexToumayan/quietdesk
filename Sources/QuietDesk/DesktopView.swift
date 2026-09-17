@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 /// What the desktop surfaces (icon view and shield) need from their owner.
 protocol DesktopSurfaceDelegate: AnyObject {
     var showsPreviews: Bool { get }
+    var showsItemInfo: Bool { get }
     var isManualLayout: Bool { get }
     /// Called on any click on the desktop, before the click is handled (activation policy).
     func surfaceDidReceiveClick()

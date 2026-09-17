@@ -79,6 +79,42 @@ enum StacksMode: String, CaseIterable {
     }
 }
 
+/// The desktop's View Options (Finder's vocabulary). QuietDesk keeps its own copy so the grid
+/// can be adjusted live without touching Finder's settings; the defaults are imported from Finder.
+struct ViewOptions: Equatable {
+    var iconSize: CGFloat
+    var gridSpacing: CGFloat      // Finder's scale, 1...100
+    var textSize: CGFloat
+    var labelOnBottom: Bool
+    var showItemInfo: Bool
+    var showIconPreview: Bool
+
+    static let iconSizes: [CGFloat] = [16, 32, 36, 48, 64, 72, 96, 128]
+    static let textSizes: [CGFloat] = [10, 11, 12, 13, 14, 15, 16]
+
+    static func from(finder p: FinderDesktopPrefs) -> ViewOptions {
+        ViewOptions(iconSize: p.iconSize, gridSpacing: p.gridSpacing, textSize: p.textSize,
+                    labelOnBottom: p.labelOnBottom, showItemInfo: p.showItemInfo, showIconPreview: p.showIconPreview)
+    }
+
+    var dictionary: [String: Any] {
+        ["iconSize": iconSize, "gridSpacing": gridSpacing, "textSize": textSize,
+         "labelOnBottom": labelOnBottom, "showItemInfo": showItemInfo, "showIconPreview": showIconPreview]
+    }
+
+    init(iconSize: CGFloat, gridSpacing: CGFloat, textSize: CGFloat, labelOnBottom: Bool, showItemInfo: Bool, showIconPreview: Bool) {
+        self.iconSize = iconSize; self.gridSpacing = gridSpacing; self.textSize = textSize
+        self.labelOnBottom = labelOnBottom; self.showItemInfo = showItemInfo; self.showIconPreview = showIconPreview
+    }
+
+    init?(dictionary d: [String: Any]) {
+        guard let i = d["iconSize"] as? Double, let g = d["gridSpacing"] as? Double, let t = d["textSize"] as? Double else { return nil }
+        self.init(iconSize: i, gridSpacing: g, textSize: t,
+                  labelOnBottom: d["labelOnBottom"] as? Bool ?? true, showItemInfo: d["showItemInfo"] as? Bool ?? false,
+                  showIconPreview: d["showIconPreview"] as? Bool ?? true)
+    }
+}
+
 /// Plain UserDefaults persistence for the user-facing controls.
 final class Settings {
     static let shared = Settings()
@@ -105,8 +141,21 @@ final class Settings {
     }
     var stacksMode: StacksMode {
         get { StacksMode(rawValue: defaults.string(forKey: "stacksMode") ?? "") ?? .finder }
-        set { defaults.set(newValue.rawValue, forKey: "stacksMode") }
+        set {
+            defaults.set(newValue.rawValue, forKey: "stacksMode")
+            if newValue.groupBy != nil, newValue != .off { defaults.set(newValue.rawValue, forKey: "lastStacksGroup") }
+        }
     }
+    /// The grouping to return to when "Use Stacks" is switched back on.
+    var lastStacksGroup: StacksMode {
+        StacksMode(rawValue: defaults.string(forKey: "lastStacksGroup") ?? "") ?? .dateAdded
+    }
+    /// nil means "follow Finder's current View Options".
+    var viewOptions: ViewOptions? {
+        get { (defaults.dictionary(forKey: "viewOptions")).flatMap(ViewOptions.init(dictionary:)) }
+        set { if let v = newValue { defaults.set(v.dictionary, forKey: "viewOptions") } else { defaults.removeObject(forKey: "viewOptions") } }
+    }
+    func effectiveViewOptions(finder: FinderDesktopPrefs) -> ViewOptions { viewOptions ?? .from(finder: finder) }
     /// Clicking the desktop brings Finder forward (menu bar shows Finder, like the native desktop)
     /// while QuietDesk's panel keeps keyboard focus. Off: QuietDesk itself becomes the active app.
     var activateFinderOnDesktopClick: Bool {

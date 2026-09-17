@@ -87,8 +87,8 @@ extension DesktopView {
             case .error: name = "exclamationmark.icloud"
             }
             if let name, let glyph = Self.symbol(name, pointSize: 9, color: NSColor.white.withAlphaComponent(0.9)) {
-                // Right of the icon's bottom-right corner, where it never collides with the label text.
-                let r = NSRect(x: cell.iconRect.maxX + 2, y: cell.iconRect.maxY - 12, width: 13, height: 11)
+                // A small badge on the icon's bottom-right corner (works for both label positions).
+                let r = NSRect(x: cell.iconRect.maxX - 9, y: cell.iconRect.maxY - 7, width: 13, height: 11)
                 glyph.draw(in: r, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high])
             }
         }
@@ -125,7 +125,7 @@ extension DesktopView {
 
     func labelAttributes() -> [NSAttributedString.Key: Any] {
         let paragraph = NSMutableParagraphStyle()
-        paragraph.alignment = .center
+        paragraph.alignment = metrics.labelOnBottom ? .center : .left
         paragraph.lineBreakMode = .byWordWrapping
         let shadow = NSShadow()
         shadow.shadowColor = NSColor.black.withAlphaComponent(0.85)
@@ -147,7 +147,7 @@ extension DesktopView {
         let bounding = text.boundingRect(with: NSSize(width: maxWidth - 12, height: metrics.labelLineHeight * 6),
                                          options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], attributes: attrs)
         let w = ceil(bounding.width) + 12, h = ceil(bounding.height) + 4
-        var x = cell.cellRect.midX - w / 2
+        var x = metrics.labelOnBottom ? cell.cellRect.midX - w / 2 : cell.labelRect.minX - 6
         x = max(4, min(x, bounds.width - w - 4))
         return NSRect(x: x, y: cell.labelRect.minY - 1, width: w, height: h)
     }
@@ -157,6 +157,13 @@ extension DesktopView {
         switch style {
         case .plain:
             truncatedLabel(name, width: cell.labelRect.width).draw(with: cell.labelRect, options: [.usesLineFragmentOrigin])
+            if metrics.infoLines > 0, let info = itemInfo(for: cell) {
+                var attrs = labelAttributes()
+                attrs[.foregroundColor] = NSColor.white.withAlphaComponent(0.78)
+                attrs[.font] = NSFont.systemFont(ofSize: max(9, metrics.textSize - 1))
+                let r = NSRect(x: cell.labelRect.minX, y: cell.labelRect.minY + 2 * metrics.labelLineHeight, width: cell.labelRect.width, height: metrics.labelLineHeight + 2)
+                (info as NSString).draw(with: r, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], attributes: attrs)
+            }
         case .hovered, .selected, .focused:
             let box = expandedLabelRect(for: cell)
             switch style {
@@ -168,6 +175,15 @@ extension DesktopView {
             var attrs = labelAttributes()
             attrs[.shadow] = nil
             (name as NSString).draw(with: box.insetBy(dx: 6, dy: 2), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], attributes: attrs)
+        }
+    }
+
+    /// Finder's "Show item info" line: item counts for folders and stacks, sizes for files,
+    /// free space for volumes. Folder counts are computed lazily off the main thread.
+    private func itemInfo(for cell: LayoutCell) -> String? {
+        switch cell.entry {
+        case .stack(let s): return s.items.count == 1 ? "1 item" : "\(s.items.count) items"
+        case .item(let item): return ItemInfoCache.shared.info(for: item)
         }
     }
 

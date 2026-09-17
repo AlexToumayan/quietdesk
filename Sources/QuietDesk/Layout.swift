@@ -1,8 +1,9 @@
 import AppKit
 
-/// Grid geometry. Finder's exact formula is internal; these values are CALIBRATED against
-/// Finder on macOS 26.6 with icon size 36, text size 12, grid spacing 26 (measured pitch
-/// 84 x 82 pt, first icon centre 51 pt from the right edge and 27 pt below the menu bar).
+/// Grid geometry. Finder's exact formula is internal; this one is CALIBRATED against Finder on
+/// macOS 26.6 at icon size 36 / text size 12 on two grid-spacing settings: spacing 26 gives
+/// 84 x 82 pt cells, spacing 1 (the slider's minimum) gives 50 x 66 pt. Between and beyond those
+/// points the mapping is assumed linear in the spacing value and additive in icon size.
 struct GridMetrics {
     let iconSize: CGFloat
     let textSize: CGFloat
@@ -11,19 +12,31 @@ struct GridMetrics {
     let topInset: CGFloat
     let rightInset: CGFloat
     let labelLineHeight: CGFloat
+    let labelOnBottom: Bool
+    let infoLines: Int          // 1 when "Show item info" adds a line under the name
 
-    static func from(prefs: FinderDesktopPrefs) -> GridMetrics {
-        let font = NSFont.systemFont(ofSize: prefs.textSize)
+    var labelLines: Int { 2 + infoLines }
+
+    static func from(options o: ViewOptions) -> GridMetrics {
+        let font = NSFont.systemFont(ofSize: o.textSize)
         let lineHeight = ceil(font.ascender - font.descender + font.leading)
-        return GridMetrics(
-            iconSize: prefs.iconSize,
-            textSize: prefs.textSize,
-            cellWidth: prefs.iconSize + prefs.gridSpacing + 22,
-            cellHeight: prefs.iconSize + 2 * lineHeight + 16,
-            topInset: 9,
-            rightInset: 9,
-            labelLineHeight: lineHeight)
+        let info = o.showItemInfo ? 1 : 0
+        let labelBlock = CGFloat(2 + info) * lineHeight
+        let cw: CGFloat, ch: CGFloat
+        if o.labelOnBottom {
+            cw = (o.iconSize + 13 + 1.36 * o.gridSpacing).rounded()
+            ch = (o.iconSize + labelBlock + 0.64 * (o.gridSpacing - 1)).rounded()
+        } else {
+            // Label beside the icon: a wide, short cell.
+            let textWidth = (max(96, o.textSize * 9) + 1.36 * o.gridSpacing).rounded()
+            cw = o.iconSize + 6 + textWidth
+            ch = (max(o.iconSize, labelBlock) + 6 + 0.64 * (o.gridSpacing - 1)).rounded()
+        }
+        return GridMetrics(iconSize: o.iconSize, textSize: o.textSize, cellWidth: cw, cellHeight: ch,
+                           topInset: 9, rightInset: 9, labelLineHeight: lineHeight, labelOnBottom: o.labelOnBottom, infoLines: info)
     }
+
+    static func from(prefs: FinderDesktopPrefs) -> GridMetrics { from(options: .from(finder: prefs)) }
 }
 
 struct LayoutCell {
@@ -80,8 +93,14 @@ enum Layout {
 
     static func makeCell(index: Int, entry: LayoutEntry, col: Int, row: Int, origin: NSPoint, metrics m: GridMetrics) -> LayoutCell {
         let cell = NSRect(x: origin.x, y: origin.y, width: m.cellWidth, height: m.cellHeight)
-        let icon = NSRect(x: (cell.midX - m.iconSize / 2).rounded(), y: origin.y, width: m.iconSize, height: m.iconSize)
-        let label = NSRect(x: origin.x + 5, y: icon.maxY + 3, width: m.cellWidth - 10, height: 2 * m.labelLineHeight + 2)
+        let labelHeight = CGFloat(m.labelLines) * m.labelLineHeight + 2
+        if m.labelOnBottom {
+            let icon = NSRect(x: (cell.midX - m.iconSize / 2).rounded(), y: origin.y, width: m.iconSize, height: m.iconSize)
+            let label = NSRect(x: origin.x + 5, y: icon.maxY + 3, width: m.cellWidth - 10, height: labelHeight)
+            return LayoutCell(index: index, entry: entry, col: col, row: row, cellRect: cell, iconRect: icon, labelRect: label)
+        }
+        let icon = NSRect(x: origin.x + 3, y: (cell.midY - m.iconSize / 2).rounded(), width: m.iconSize, height: m.iconSize)
+        let label = NSRect(x: icon.maxX + 4, y: (cell.midY - labelHeight / 2).rounded(), width: cell.maxX - icon.maxX - 8, height: labelHeight)
         return LayoutCell(index: index, entry: entry, col: col, row: row, cellRect: cell, iconRect: icon, labelRect: label)
     }
 

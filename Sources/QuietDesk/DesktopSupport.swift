@@ -46,23 +46,61 @@ enum DesktopDrop {
     }
 }
 
+/// "Show item info" values, computed once per item. Folder counts need a directory listing
+/// (top level only, never recursive), done off the main thread and cached until the folder changes.
+final class ItemInfoCache {
+    static let shared = ItemInfoCache()
+    var onReady: ((URL) -> Void)?
+    private var cache: [String: String] = [:]
+    private var pending = Set<String>()
+    private let queue = DispatchQueue(label: "dev.quietdesk.iteminfo", qos: .utility)
+    private static let bytes: ByteCountFormatter = { let f = ByteCountFormatter(); f.countStyle = .file; return f }()
+
+    func info(for item: DesktopItem) -> String? {
+        if item.isVolume {
+            let free = (try? item.url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?.volumeAvailableCapacityForImportantUsage ?? 0
+            return free > 0 ? Self.bytes.string(fromByteCount: free) + " available" : nil
+        }
+        if !item.isFolder { return Self.bytes.string(fromByteCount: item.size) }
+        let key = item.url.path
+        if let cached = cache[key] { return cached }
+        if pending.insert(key).inserted {
+            queue.async {
+                let names = (try? FileManager.default.contentsOfDirectory(atPath: key)) ?? []
+                let count = names.filter { !$0.hasPrefix(".") }.count
+                DispatchQueue.main.async {
+                    self.cache[key] = count == 1 ? "1 item" : "\(count) items"
+                    self.pending.remove(key)
+                    self.onReady?(item.url)
+                }
+            }
+        }
+        return nil
+    }
+
+    func invalidate(_ url: URL) { cache[url.path] = nil }
+    func removeAll() { cache.removeAll(); pending.removeAll() }
+}
+
 enum DesktopMenus {
+    /// Mirrors Finder's own desktop menu: New Folder, then the items the app delegate supplies
+    /// (Get Info, Change Wallpaper, Use Stacks, Group Stacks By, Sort By, labels, View Options),
+    /// then Paste and a shortcut to the Desktop folder.
     static func emptyDesktopMenu(target: AnyObject, extras: [NSMenuItem]) -> NSMenu {
         let menu = NSMenu()
         let newFolder = NSMenuItem(title: "New Folder", action: Selector(("menuNewFolder")), keyEquivalent: "n")
         newFolder.keyEquivalentModifierMask = [.command, .shift]; newFolder.target = target
         menu.addItem(newFolder)
-        let paste = NSMenuItem(title: "Paste", action: Selector(("menuPaste")), keyEquivalent: "v")
-        paste.target = target
-        paste.isEnabled = !FileOperations.pasteboardFileURLs().isEmpty
-        menu.addItem(paste)
         if !extras.isEmpty {
             menu.addItem(.separator())
             extras.forEach { menu.addItem($0) }
         }
         menu.addItem(.separator())
+        let paste = NSMenuItem(title: "Paste", action: Selector(("menuPaste")), keyEquivalent: "v")
+        paste.target = target
+        paste.isEnabled = !FileOperations.pasteboardFileURLs().isEmpty
+        menu.addItem(paste)
         menu.addItem(withTitle: "Show Desktop Folder in Finder", action: Selector(("menuShowDesktop")), keyEquivalent: "").target = target
-        menu.addItem(withTitle: "Change Wallpaper…", action: Selector(("menuChangeWallpaper")), keyEquivalent: "").target = target
         menu.autoenablesItems = false
         return menu
     }

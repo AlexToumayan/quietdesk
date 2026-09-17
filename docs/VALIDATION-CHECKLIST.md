@@ -39,6 +39,14 @@ everything else is unverified until ticked.
 - [ ] Eject on a mounted disk image ejects it; the icon disappears.
 - [ ] Show Original on an alias reveals the original in Finder.
 
+## View Options and menus
+- [ ] Menu › Turn QuietDesk Off restores the native desktop and keeps the eye icon (open); Turn On brings the layer back (slashed).
+- [ ] Right-click on the wallpaper shows New Folder, Get Info, Change Wallpaper, Use Stacks, Group Stacks By, Sort By, Item Labels, Show View Options, Paste.
+- [ ] Show View Options opens the panel; moving Grid spacing re-flows the grid live; the tightest setting matches Finder's tightest grid; icon size and text size apply live.
+- [ ] Label position Right: names sit beside icons in wide cells; hover, selection and rename still work.
+- [ ] Show item info: folders show item counts, files sizes, the disk image free space.
+- [ ] Use Finder's Settings returns everything to Finder's current values (change Finder's View Options while QuietDesk is off, turn it on: the grid matches).
+
 ## Stacks and sorting
 - [ ] Single click on a stack expands it in place (items appear after it, others shift); click again collapses.
 - [ ] Sort By ▸ Name / Kind / Date Modified reorder the grid; "Finder's Setting" returns to Finder's order.

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.9.1 — 2026-09-17
+
+- New app icon (slashed eye, matching the menu-bar icon); menu-bar icon shows an open eye while off.
+- Menu: "Turn QuietDesk On/Off" at the top; "Quit QuietDesk" kept separate; "Show View Options…".
+- View Options window: Stack By, Sort By, icon size, grid spacing, text size, label position
+  (bottom/right), item info, icon preview; applied live; "Use Finder's Settings" re-imports.
+- Right-click on the wallpaper now mirrors Finder's desktop menu (Get Info, Change Wallpaper,
+  Use Stacks, Group Stacks By, Sort By, Show View Options).
+- Fixed: Finder's freshly changed View Options were read from a stale cache; the grid formula is now
+  calibrated at two spacing settings (tight grids match).
+- "Show item info" (item counts, sizes, free space) and label-on-the-right layouts.
+
 ## 0.9.0 — 2026-09-17
 
 First public build. Feature-complete desktop layer; hands-on validation still in progress

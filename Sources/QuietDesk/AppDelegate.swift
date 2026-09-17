@@ -42,6 +42,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         recoverFromPreviousRun()
         installSignalHandler()
+        ViewOptionsWindowController.shared.onChange = { [weak self] in
+            self?.controller?.applyViewOptions()
+            self?.controller?.reloadAndRelayout()   // sort/stacks changes need the model
+            self?.rebuildMenu()
+        }
         buildStatusItem()
         if let i = args.firstIndex(of: "--render-status-item"), i + 1 < args.count {
             // Give AppKit a moment to place the item in the menu bar before inspecting it.
@@ -223,12 +228,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         radioMenu(LabelMode.allCases.map { (title: $0.title, value: $0.rawValue) }, current: settings.labelMode.rawValue, action: #selector(setLabelMode(_:)), enabled: enabled)
     }
 
-    /// Submenus appended to the desktop's own context menu.
+    private var stacksEnabledNow: Bool {
+        let g = settings.stacksMode.groupBy ?? FinderDesktopPrefs.load().groupBy
+        return !g.isEmpty && g != "None"
+    }
+
+    private func groupStacksMenu() -> NSMenu {
+        let modes: [StacksMode] = [.kind, .dateAdded, .dateModified, .dateCreated, .dateLastOpened, .tags]
+        let prefs = FinderDesktopPrefs.load()
+        let effective: StacksMode = settings.stacksMode == .finder ? (StacksMode.allCases.first { $0.groupBy == prefs.groupBy } ?? .off) : settings.stacksMode
+        return radioMenu(modes.map { (title: String($0.title.dropFirst("Group by ".count)), value: $0.rawValue) }, current: effective.rawValue, action: #selector(setStacksMode(_:)), enabled: true)
+    }
+
+    /// The middle of the desktop's own right-click menu, mirroring Finder's: Get Info, Change
+    /// Wallpaper, Use Stacks, Group Stacks By, Sort By, Item Labels, Show View Options.
     private func contextMenuExtras() -> [NSMenuItem] {
+        let info = NSMenuItem(title: "Get Info", action: #selector(getInfoDesktop), keyEquivalent: ""); info.target = self
+        let wallpaper = NSMenuItem(title: "Change Wallpaper…", action: #selector(changeWallpaper), keyEquivalent: ""); wallpaper.target = self
+        let useStacks = NSMenuItem(title: "Use Stacks", action: #selector(toggleUseStacks), keyEquivalent: ""); useStacks.target = self
+        useStacks.state = stacksEnabledNow ? .on : .off
+        let group = NSMenuItem(title: "Group Stacks By", action: nil, keyEquivalent: ""); group.submenu = groupStacksMenu(); group.isEnabled = stacksEnabledNow
         let sort = NSMenuItem(title: "Sort By", action: nil, keyEquivalent: ""); sort.submenu = sortMenu(enabled: true)
-        let stacks = NSMenuItem(title: "Stacks", action: nil, keyEquivalent: ""); stacks.submenu = stacksMenu(enabled: true)
         let labels = NSMenuItem(title: "Item Labels", action: nil, keyEquivalent: ""); labels.submenu = labelsMenu(enabled: true)
-        return [sort, stacks, labels]
+        let options = NSMenuItem(title: "Show View Options", action: #selector(showViewOptions), keyEquivalent: "j"); options.target = self
+        return [info, wallpaper, .separator(), useStacks, group, sort, labels, options]
     }
 
     private func rebuildMenu() {
@@ -240,10 +263,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(title)
         menu.addItem(.separator())
 
-        let enabled = NSMenuItem(title: "Enabled", action: #selector(toggleEnabled), keyEquivalent: "")
-        enabled.target = self
-        enabled.state = settings.enabled ? .on : .off
-        menu.addItem(enabled)
+        let power = NSMenuItem(title: settings.enabled ? "Turn QuietDesk Off" : "Turn QuietDesk On", action: #selector(toggleEnabled), keyEquivalent: "")
+        power.target = self
+        power.attributedTitle = NSAttributedString(string: power.title, attributes: [.font: NSFont.menuFont(ofSize: 0).withWeight(.semibold)])
+        power.toolTip = settings.enabled ? "Restores the native desktop; the menu-bar icon stays." : "Hides Finder's desktop icons and draws them with names on hover."
+        menu.addItem(power)
+        menu.addItem(.separator())
 
         let items = NSMenuItem(title: "Desktop Items", action: nil, keyEquivalent: "")
         items.submenu = radioMenu([(title: "Visible", value: true), (title: "Hidden", value: false)], current: settings.itemsVisible, action: #selector(setItemsVisible(_:)), enabled: settings.enabled)
@@ -262,6 +287,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let stacks = NSMenuItem(title: "Stacks", action: nil, keyEquivalent: "")
         stacks.submenu = stacksMenu(enabled: settings.enabled); stacks.isEnabled = settings.enabled
         menu.addItem(stacks)
+        let options = NSMenuItem(title: "Show View Options…", action: #selector(showViewOptions), keyEquivalent: "")
+        options.target = self
+        options.toolTip = "Icon size, grid spacing, text size, label position, item info, previews."
+        menu.addItem(options)
 
         menu.addItem(.separator())
         let login = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
@@ -287,9 +316,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let about = NSMenuItem(title: "About QuietDesk", action: #selector(showAbout), keyEquivalent: "")
         about.target = self
         menu.addItem(about)
-        let quit = NSMenuItem(title: "Quit and Restore Desktop", action: #selector(quit), keyEquivalent: "q")
+        let quit = NSMenuItem(title: "Quit QuietDesk", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
+        quit.toolTip = "Quits and restores the native desktop. To keep the menu-bar icon, use Turn QuietDesk Off instead."
         menu.addItem(quit)
+    }
+
+    @objc private func showViewOptions() { ViewOptionsWindowController.shared.show() }
+
+    @objc private func getInfoDesktop() {
+        FinderAutomation.openInfoWindows(for: [DesktopModel.desktopURL]) { error in
+            if let error { DesktopMenus.showError("Get Info needs Finder", error.description) }
+        }
+    }
+
+    @objc private func changeWallpaper() { DesktopMenus.openWallpaperSettings() }
+
+    @objc private func toggleUseStacks() {
+        settings.stacksMode = stacksEnabledNow ? .off : settings.lastStacksGroup
+        controller?.reloadAndRelayout()
+        ViewOptionsWindowController.shared.refresh()
+        rebuildMenu()
     }
 
     @objc private func toggleEnabled() {
@@ -315,6 +362,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let raw = sender.representedObject as? String, let key = SortKey(rawValue: raw) else { return }
         settings.sortKey = key
         controller?.reloadAndRelayout()
+        ViewOptionsWindowController.shared.refresh()
         rebuildMenu()
     }
 
@@ -322,6 +370,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let raw = sender.representedObject as? String, let mode = StacksMode(rawValue: raw) else { return }
         settings.stacksMode = mode
         controller?.reloadAndRelayout()
+        ViewOptionsWindowController.shared.refresh()
         rebuildMenu()
     }
 
