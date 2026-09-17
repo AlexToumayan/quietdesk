@@ -20,10 +20,12 @@ extension DesktopView {
         let cmd = event.modifierFlags.contains(.command), shift = event.modifierFlags.contains(.shift)
         guard let i = cellIndex(at: p) else {
             mouseDownCell = nil
-            if !cmd && !shift { select([]); setFocus(nil) }
+            if !cmd && !shift { select([]); setFocus(nil); delegate?.surfaceCollapseStacks() }
             bandStart = p
             return
         }
+        // Clicking anything that is not a Stack or one of an open Stack's members collapses Stacks.
+        if !cells[i].entry.isStack, cells[i].entry.item?.stackTitle == nil { delegate?.surfaceCollapseStacks() }
         let wasSoleSelection = selection == [i]
         mouseDownCell = i
         if cmd {

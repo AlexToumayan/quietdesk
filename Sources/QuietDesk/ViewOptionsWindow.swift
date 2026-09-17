@@ -20,11 +20,12 @@ final class ViewOptionsWindowController: NSWindowController {
     private let itemInfo = NSButton(checkboxWithTitle: "Show item info", target: nil, action: nil)
     private let iconPreview = NSButton(checkboxWithTitle: "Show icon preview", target: nil, action: nil)
     private let cloudStatus = NSButton(checkboxWithTitle: "Show iCloud status", target: nil, action: nil)
+    private let hoverReveal = NSPopUpButton(frame: .zero, pullsDown: false)
     private let stackModes: [StacksMode] = [.off, .kind, .dateAdded, .dateModified, .dateCreated, .dateLastOpened, .tags]
     private let sortKeys: [SortKey] = [.none, .name, .kind, .dateAdded, .dateModified, .dateCreated, .dateLastOpened, .size, .tags]
 
     private init() {
-        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 300, height: 460),
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 320, height: 500),
                             styleMask: [.titled, .closable, .utilityWindow], backing: .buffered, defer: false)
         panel.title = "Desktop"
         panel.isFloatingPanel = true
@@ -53,12 +54,13 @@ final class ViewOptionsWindowController: NSWindowController {
         for mode in stackModes { stackBy.addItem(withTitle: mode == .off ? "None" : String(mode.title.dropFirst("Group by ".count))) }
         for key in sortKeys { sortBy.addItem(withTitle: key == .none ? "None" : key.title) }
         for size in ViewOptions.textSizes { textSize.addItem(withTitle: String(Int(size))) }
+        for title in ["Only the item", "The item and its neighbours", "A wider area"] { hoverReveal.addItem(withTitle: title) }
         iconSize.numberOfTickMarks = ViewOptions.iconSizes.count
         iconSize.allowsTickMarkValuesOnly = true
         iconSize.isContinuous = true
         gridSpacing.numberOfTickMarks = 8
         gridSpacing.isContinuous = true
-        for (control, sel) in [(stackBy, #selector(changed)), (sortBy, #selector(changed)), (textSize, #selector(changed))] as [(NSControl, Selector)] { control.target = self; control.action = sel }
+        for (control, sel) in [(stackBy, #selector(changed)), (sortBy, #selector(changed)), (textSize, #selector(changed)), (hoverReveal, #selector(changed))] as [(NSControl, Selector)] { control.target = self; control.action = sel }
         for control in [iconSize, gridSpacing] { control.target = self; control.action = #selector(changed) }
         for control in [labelBottom, labelRight, itemInfo, iconPreview, cloudStatus] { control.target = self; control.action = #selector(changed) }
         iconSizeLabel.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
@@ -81,6 +83,7 @@ final class ViewOptionsWindowController: NSWindowController {
             [NSGridCell.emptyContentView, itemInfo],
             [NSGridCell.emptyContentView, iconPreview],
             [NSGridCell.emptyContentView, cloudStatus],
+            row("Names on hover:", hoverReveal),
             [NSGridCell.emptyContentView, useFinder],
             [NSGridCell.emptyContentView, note],
         ])
@@ -119,6 +122,7 @@ final class ViewOptionsWindowController: NSWindowController {
         itemInfo.state = o.showItemInfo ? .on : .off
         iconPreview.state = o.showIconPreview ? .on : .off
         cloudStatus.state = o.showCloudStatus ? .on : .off
+        hoverReveal.selectItem(at: o.hoverReveal)
     }
 
     @objc private func changed(_ sender: Any?) {
@@ -130,6 +134,7 @@ final class ViewOptionsWindowController: NSWindowController {
         o.showItemInfo = itemInfo.state == .on
         o.showIconPreview = iconPreview.state == .on
         o.showCloudStatus = cloudStatus.state == .on
+        o.hoverReveal = max(0, hoverReveal.indexOfSelectedItem)
         settings.viewOptions = o
         settings.stacksMode = stackModes[max(0, stackBy.indexOfSelectedItem)]
         settings.sortKey = sortKeys[max(0, sortBy.indexOfSelectedItem)]

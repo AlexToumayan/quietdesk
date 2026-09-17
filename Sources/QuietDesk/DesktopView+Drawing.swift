@@ -15,16 +15,19 @@ extension DesktopView {
                 drawLabel(cell, style: selection.contains(i) ? .selected : (focusIndex == i ? .focused : .plain))
             }
         }
-        // The hovered label is drawn last so it sits above its neighbours.
+        // The hovered label is drawn last so it sits above its neighbours. When neighbours are
+        // revealed too, the hovered name uses the same plain style so nothing overlaps.
         if let h = hoverIndex, h < cells.count, h != renamingIndex, labelMode != .hidden {
-            drawLabel(cells[h], style: selection.contains(h) ? .selected : .hovered)
+            if selection.contains(h) { drawLabel(cells[h], style: .selected) }
+            else if revealed.isEmpty { drawLabel(cells[h], style: .hovered) }
+            else { drawLabel(cells[h], style: .plain) }
         }
     }
 
     func labelVisible(_ i: Int) -> Bool {
         switch labelMode {
         case .always: return true
-        case .hover: return selection.contains(i) || focusIndex == i
+        case .hover: return selection.contains(i) || focusIndex == i || revealed.contains(i)
         case .hidden: return false
         }
     }

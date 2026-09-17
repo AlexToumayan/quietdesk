@@ -86,6 +86,17 @@ final class OverlayController: DesktopSurfaceDelegate {
         }
         defaultObservers.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in self?.rebuildWindows() })
+        // A window opening on top of the desktop (e.g. the file just double-clicked) does not
+        // move the pointer, so no mouse-exited event arrives; end the hover when another app
+        // comes forward or our panel loses keyboard focus.
+        workspaceObservers.append(wc.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] note in
+            let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+            if app?.processIdentifier != ProcessInfo.processInfo.processIdentifier { self?.views.forEach { $0.clearHover() } }
+        })
+        defaultObservers.append(NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification, object: nil, queue: .main) { [weak self] note in
+            guard let self, let w = note.object as? NSWindow, self.windows.contains(where: { $0 === w }) else { return }
+            self.views.forEach { $0.clearHover() }
+        })
         let monitor = CloudStatusMonitor(directory: DesktopModel.desktopURL)
         monitor.onChange = { [weak self] in self?.cloudStatusChanged() }
         monitor.start()
@@ -302,6 +313,13 @@ final class OverlayController: DesktopSurfaceDelegate {
     var showsPreviews: Bool { options.showIconPreview }
     var showsItemInfo: Bool { options.showItemInfo }
     var showsCloudStatus: Bool { options.showCloudStatus }
+    var hoverRevealRadius: Int { options.hoverReveal }
+
+    func surfaceCollapseStacks() {
+        guard !expandedStacks.isEmpty else { return }
+        expandedStacks.removeAll()
+        reloadAndRelayout()
+    }
     var isManualLayout: Bool { model?.isManual ?? false }
 
     private var keyReassertObserver: NSObjectProtocol?
@@ -325,7 +343,8 @@ final class OverlayController: DesktopSurfaceDelegate {
     }
 
     func surface(toggleStack stack: StackGroup) {
-        if expandedStacks.contains(stack.title) { expandedStacks.remove(stack.title) } else { expandedStacks.insert(stack.title) }
+        // One Stack open at a time, like Finder.
+        if expandedStacks.contains(stack.title) { expandedStacks.removeAll() } else { expandedStacks = [stack.title] }
         reloadAndRelayout()
     }
 

@@ -7,10 +7,14 @@ protocol DesktopSurfaceDelegate: AnyObject {
     var showsPreviews: Bool { get }
     var showsItemInfo: Bool { get }
     var showsCloudStatus: Bool { get }
+    /// 0 = only the hovered item shows its name; 1 = neighbours too; 2 = a wider area.
+    var hoverRevealRadius: Int { get }
     var isManualLayout: Bool { get }
     /// Called on any click on the desktop, before the click is handled (activation policy).
     func surfaceDidReceiveClick()
     func surface(toggleStack stack: StackGroup)
+    /// Finder collapses expanded Stacks when you click anywhere else.
+    func surfaceCollapseStacks()
     /// Manual layouts: the user dropped items at new icon centres (flipped, screen-local).
     func surface(reposition centres: [URL: NSPoint], on screen: NSScreen)
     /// Submenus appended to the empty-desktop context menu (Sort By, Stacks, Labels).
@@ -31,7 +35,7 @@ final class DesktopView: NSView, NSDraggingSource, NSTextFieldDelegate, QLPrevie
     var cells: [LayoutCell] = [] {
         willSet { keptSelection = Set(selectedURLs) }   // read against the OLD cells
         didSet {
-            selection.removeAll(); hoverIndex = nil; focusIndex = nil
+            selection.removeAll(); hoverIndex = nil; revealed.removeAll(); focusIndex = nil
             setDropTarget(nil)                              // also stops a spring-loading timer
             pendingRenameClick?.cancel(); pendingRenameClick = nil
             bandStart = nil
@@ -54,6 +58,8 @@ final class DesktopView: NSView, NSDraggingSource, NSTextFieldDelegate, QLPrevie
     var committingRename = false
     var dragCarriesPromise = false
     var hoverIndex: Int?
+    /// Neighbours of the hovered cell whose names are shown along with it (hover radius > 0).
+    var revealed = Set<Int>()
     var selection = Set<Int>()
     var focusIndex: Int?
     var dropTargetIndex: Int?
@@ -129,12 +135,23 @@ final class DesktopView: NSView, NSDraggingSource, NSTextFieldDelegate, QLPrevie
     /// Test hook used by the --render flag.
     func simulateHover(_ i: Int) { setHover(i) }
 
+    /// Clears a hover that macOS never ended (a window appeared on top without the pointer moving).
+    func clearHover() { setHover(nil) }
+
     func setHover(_ i: Int?) {
         guard i != hoverIndex else { return }
-        let old = hoverIndex
+        let oldReveal = revealed.union(hoverIndex.map { [$0] } ?? [])
         hoverIndex = i
-        if let o = old { invalidate(o) }
-        if let n = i { invalidate(n) }
+        revealed = i.map { neighbours(of: $0) } ?? []
+        for k in oldReveal.union(revealed).union(i.map { [$0] } ?? []) { invalidate(k) }
+    }
+
+    /// Cells within the configured radius of `i` (Chebyshev distance on the grid), excluding `i`.
+    func neighbours(of i: Int) -> Set<Int> {
+        let r = delegate?.hoverRevealRadius ?? 0
+        guard r > 0, i < cells.count else { return [] }
+        let c = cells[i]
+        return Set(cells.indices.filter { $0 != i && abs(cells[$0].col - c.col) <= r && abs(cells[$0].row - c.row) <= r })
     }
 
     func invalidate(_ i: Int) {

@@ -12,7 +12,7 @@ extension DesktopView {
         case 124: moveFocus(dCol: -1, dRow: 0); return                 // right
         case 125: if cmd { open(selection.sorted()) } else { moveFocus(dCol: 0, dRow: 1) }; return
         case 126: moveFocus(dCol: 0, dRow: -1); return
-        case 53:  select([]); setFocus(nil); return                    // escape
+        case 53:  select([]); setFocus(nil); delegate?.surfaceCollapseStacks(); return   // escape
         case 36 where !cmd, 76 where !cmd:                             // return / enter: rename
             if selection.count == 1, let i = selection.first { beginRename(i) } else { NSSound.beep() }
             return

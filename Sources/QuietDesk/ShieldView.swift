@@ -32,7 +32,10 @@ final class ShieldView: NSView, RubberBandHost {
 
     override func mouseDown(with event: NSEvent) {
         focusIconView()
-        if !event.modifierFlags.contains(.command) && !event.modifierFlags.contains(.shift) { iconView?.clearSelection() }
+        if !event.modifierFlags.contains(.command) && !event.modifierFlags.contains(.shift) {
+            iconView?.clearSelection()
+            delegate?.surfaceCollapseStacks()
+        }
         downPoint = convert(event.locationInWindow, from: nil)
     }
 

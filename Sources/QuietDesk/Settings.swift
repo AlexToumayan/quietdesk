@@ -90,6 +90,9 @@ struct ViewOptions: Equatable {
     var showIconPreview: Bool
     /// Cloud glyph on iCloud items (Finder shows one; at tight spacings some people prefer none).
     var showCloudStatus: Bool = true
+    /// On Hover: how far around the pointed-at item names are revealed (0 = just that item,
+    /// 1 = its neighbours too, 2 = a wider area).
+    var hoverReveal: Int = 0
 
     static let iconSizes: [CGFloat] = [16, 32, 36, 48, 64, 72, 96, 128]
     static let textSizes: [CGFloat] = [10, 11, 12, 13, 14, 15, 16]
@@ -102,7 +105,7 @@ struct ViewOptions: Equatable {
     var dictionary: [String: Any] {
         ["iconSize": iconSize, "gridSpacing": gridSpacing, "textSize": textSize,
          "labelOnBottom": labelOnBottom, "showItemInfo": showItemInfo, "showIconPreview": showIconPreview,
-         "showCloudStatus": showCloudStatus]
+         "showCloudStatus": showCloudStatus, "hoverReveal": hoverReveal]
     }
 
     init(iconSize: CGFloat, gridSpacing: CGFloat, textSize: CGFloat, labelOnBottom: Bool, showItemInfo: Bool, showIconPreview: Bool) {
@@ -116,6 +119,7 @@ struct ViewOptions: Equatable {
                   labelOnBottom: d["labelOnBottom"] as? Bool ?? true, showItemInfo: d["showItemInfo"] as? Bool ?? false,
                   showIconPreview: d["showIconPreview"] as? Bool ?? true)
         showCloudStatus = d["showCloudStatus"] as? Bool ?? true
+        hoverReveal = max(0, min(2, d["hoverReveal"] as? Int ?? 0))
     }
 }
 

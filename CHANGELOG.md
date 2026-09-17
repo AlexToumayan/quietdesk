@@ -3,6 +3,11 @@
 ## Unreleased
 
 - View Options: "Show iCloud status" switch (hide the cloud glyphs, useful on tight grids).
+- View Options: "Names on hover" (only the item / the item and its neighbours / a wider area).
+- Fixed: a hover label could stay on screen after a window opened on top of the desktop without
+  the pointer moving (e.g. after double-clicking a file); hover now ends when another app comes
+  forward or the desktop loses keyboard focus.
+- Stacks: one open at a time; clicking the wallpaper, another item, or Escape collapses it (Finder behaviour).
 - Documentation: figures for measurements, review outcomes, research verification, grid
   calibration, workflow sizes and the window-level stack (`scripts/make-charts.py`).
 
