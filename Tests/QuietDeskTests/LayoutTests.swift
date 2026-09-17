@@ -1,5 +1,6 @@
 import XCTest
 import AppKit
+import UniformTypeIdentifiers
 @testable import QuietDesk
 
 /// Unit tests for the pure logic (the same checks `QuietDesk --self-test` runs, in XCTest form
