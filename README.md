@@ -45,7 +45,7 @@ Show View Options, Paste.
 
 **View Options** (⌘J on the desktop, or from either menu) is QuietDesk's version of Finder's panel:
 Stack By, Sort By, icon size, grid spacing, text size, label position (bottom or right), Show item
-info, Show icon preview. Changes apply immediately to QuietDesk's desktop and never modify Finder's
+info, Show icon preview, Show iCloud status. Changes apply immediately to QuietDesk's desktop and never modify Finder's
 own settings; "Use Finder's Settings" re-imports Finder's current values (that is also the default
 until you change something). The grid geometry is calibrated to Finder at two spacing settings on
 macOS 26.6 and is linear in between.
@@ -190,6 +190,8 @@ defaults delete dev.quietdesk.QuietDesk
 QuietDesk stores only its menu choices and the restore record in that preferences domain.
 
 ## Performance (measured, release build, macOS 26.6.2)
+
+![Idle measurement](docs/assets/idle-measurement.svg)
 
 Overlay enabled and idle for 40 s with the full feature set: CPU time constant at 0.22 s (0.0 % in
 every sample), resident memory about 75 MB, no timers, no polling, no disk activity. Work happens only on hover, clicks, keys,

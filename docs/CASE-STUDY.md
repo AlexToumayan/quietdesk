@@ -11,6 +11,8 @@ short-lived helpers in five organized rounds, all in a single session on 2026-09
 tells that story; the plain-language explanations of the ideas involved are in
 [CONCEPTS.md](CONCEPTS.md).
 
+![Results at a glance](assets/results-at-a-glance.svg)
+
 **Start here:** [concepts](CONCEPTS.md) → [the brief](BRIEF.md) → [feasibility](FEASIBILITY.md) → [prompt library](PROMPTS.md) → evidence ([research](evidence/research.md), [experiments](../experiments/README.md), [modules](evidence/modules.md), [code review](evidence/code-review.md)) → [validation checklist](VALIDATION-CHECKLIST.md).
 
 ## 1. What the brief asked for, and why it worked as a prompt
@@ -63,6 +65,8 @@ flowchart LR
 
 ## 3. Five decisions, and the evidence behind each
 
+![Window levels](assets/window-layers.svg)
+
 Each row is a fork in the road, what was chosen, and the specific fact that forced the choice
 (E-numbers are the experiments in [FEASIBILITY.md](FEASIBILITY.md)).
 
@@ -75,6 +79,8 @@ Each row is a fork in the road, what was chosen, and the specific fact that forc
 | Never let anything download a cloud-only file. | Apple TN3150 (process I/O policy); the thumbnail generator runs out of process, so eligibility is checked before any request (module harness proved `st_flags` unchanged). |
 
 ## 4. What the process caught
+
+![Code review findings by lens](assets/review-findings.svg)
 
 These are the things that would have reached a user if the reviewers and their fact-checkers had
 not been part of the process.
@@ -97,6 +103,12 @@ not be checked without a person at the keyboard.
 
 ## 6. Numbers
 
+![Research findings and verdicts](assets/research-verification.svg)
+
+![Workflow sizes](assets/workflows.svg)
+
+![Idle measurement](assets/idle-measurement.svg)
+
 | Workflow | Agents | Tokens | Tool calls | Wall clock |
 |---|---|---|---|---|
 | Feasibility research | 16 | 2.28 M | 1,336 | 26 min |
@@ -104,6 +116,8 @@ not be checked without a person at the keyboard.
 | Code review, five lenses | 18 | 2.13 M | 297 | 30 min |
 | Code review, module integration | 4 | 0.60 M | 104 | 15 min |
 | Evidence documentation (this repo's evidence pages) | 8 | 1.44 M | 215 | 19 min |
+
+The figures on this page are generated from these numbers by `scripts/make-charts.py`.
 
 The lead agent's own work (survey, experiments, core implementation, integration, fixes, docs) is not
 counted above. Source size at v0.9.0: about 4,700 lines of Swift, no third-party dependencies.

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- View Options: "Show iCloud status" switch (hide the cloud glyphs, useful on tight grids).
+- Documentation: figures for measurements, review outcomes, research verification, grid
+  calibration, workflow sizes and the window-level stack (`scripts/make-charts.py`).
+
 ## 0.9.1 — 2026-09-17
 
 - New app icon (slashed eye, matching the menu-bar icon); menu-bar icon shows an open eye while off.
