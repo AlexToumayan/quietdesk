@@ -1,0 +1,9 @@
+# Compiled probes; rebuild with swiftc as described in README.md
+/probe
+/probe2
+/lowwin
+/hovertest
+/alphatest4
+/alphatest5
+*.dSYM/
+*.scpt
