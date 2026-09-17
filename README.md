@@ -103,6 +103,12 @@ built, and the code adversarially reviewed before release. The whole trail is in
   Command-Line-Tools-only machine run the same checks with `.build/release/QuietDesk --self-test`.
 - CI (`.github/workflows/ci.yml`) builds the release binary, runs the self-test and the unit tests,
   bundles the app and uploads it as an artifact on every push.
+- `.build/release/QuietDesk --scenario-test --defaults-suite dev.quietdesk.scenario` drives the real
+  overlay windows with synthesized clicks (Stack expand/collapse, member clicks, double-click open,
+  wallpaper clicks) before and after every View Options change, with Finder brought forward between
+  clicks as on the real desktop; 346 checks, exit status 0 when all pass. CI runs it against a
+  fixture folder (`--desktop-dir`). It uses a private preferences suite and never hides the native
+  desktop.
 - `scripts/measure-idle.sh [seconds]` reproduces the idle measurement.
 
 ## Build and run
@@ -129,6 +135,8 @@ Developer flags (run the bare executable, `.build/release/QuietDesk`):
 | `--test-seconds N` | Quit automatically after N seconds (restores the desktop). |
 | `--no-hide` | Show the overlay without hiding Finder's items (alignment check: icons should coincide). |
 | `--hit-test` | Prints which window the window server would deliver clicks to at several points. |
+| `--scenario-test [--defaults-suite NAME] [--desktop-dir PATH]` | Replays click sequences through the real overlay windows across View Options states; see Tests. |
+| `--debug-log` | Appends an event trace (clicks, relayouts, window order, View Options changes) to `~/Library/Logs/QuietDesk/debug.log`. Also `defaults write dev.quietdesk.QuietDesk debugLog -bool YES`. |
 
 ## Permissions
 
@@ -169,8 +177,13 @@ thumbnails are requested only for files that are fully local.
 
 ## Disable, quit, recover, uninstall
 
-- **Disable:** menu › Enabled (unchecks). Windows and observers go away; the native desktop is restored.
-- **Quit:** menu › Quit and Restore Desktop. Same restoration.
+- **Disable:** menu › Turn QuietDesk Off. Windows and observers go away; the native desktop is restored.
+- **Quit:** menu › Quit QuietDesk. Same restoration.
+- **Reporting a bug:** launch with the event trace on (`open QuietDesk.app --args --debug-log`),
+  reproduce, and attach `~/Library/Logs/QuietDesk/debug.log`. It stays on your Mac; the app never
+  sends anything anywhere.
+- **Rebuilt it yourself?** Every ad-hoc build has a new code hash, so macOS asks again for Desktop
+  folder access on the first launch; until you click Allow the app waits and the desktop stays native.
 - **After a crash or force-quit:** launch QuietDesk once; it notices the unfinished change and restores
   the setting. Or restore by hand:
 

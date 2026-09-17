@@ -8,6 +8,19 @@
   the pointer moving (e.g. after double-clicking a file); hover now ends when another app comes
   forward or the desktop loses keyboard focus.
 - Stacks: one open at a time; clicking the wallpaper, another item, or Escape collapses it (Finder behaviour).
+- Fixed: double-clicking an item while a Stack was open collapsed the Stack on the first click, the
+  layout shifted under the pointer, and the second click opened whatever had moved there (or
+  nothing, when the icon window itself had shrunk away). The second click now goes to the item the
+  first click landed on, wherever it moved. Found by the new scenario test.
+- Fixed: any View Options change (for example the iCloud switch) silently replaced "follow Finder's
+  setting" for Sort By and Stacks with explicit values; only the Sort By / Stack By popups change them.
+- Double-click on a Stack toggles it once and no longer also opens a Finder window.
+- Overlay windows: the icon window (desktop icons +2) and the shield (+1) now sit on two distinct
+  window levels, so no reordering by AppKit can put the shield above the icons.
+- View Options panel sizes itself to its content.
+- Diagnostics: `--scenario-test` replays real click sequences through the overlay windows (346
+  checks across 19 View Options and activation states) and runs in CI on a fixture desktop;
+  `--debug-log` writes an event trace to `~/Library/Logs/QuietDesk/debug.log` for bug reports.
 - Documentation: figures for measurements, review outcomes, research verification, grid
   calibration, workflow sizes and the window-level stack (`scripts/make-charts.py`).
 

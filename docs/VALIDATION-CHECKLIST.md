@@ -46,6 +46,9 @@ everything else is unverified until ticked.
 - [ ] Label position Right: names sit beside icons in wide cells; hover, selection and rename still work.
 - [ ] Show item info: folders show item counts, files sizes, the disk image free space.
 - [ ] Use Finder's Settings returns everything to Finder's current values (change Finder's View Options while QuietDesk is off, turn it on: the grid matches).
+- [ ] After each View Options change (iCloud status, names on hover, icon size, spacing, text size, label position, item info, previews, Use Finder's Settings): a single click still expands a Stack and a double-click still opens a folder. (Automated: `--scenario-test`, ALL PASSED on 2026-09-17.)
+- [ ] With a Stack open, double-click a folder elsewhere: the Stack collapses and that folder opens, not whatever moved under the pointer. (Automated in `--scenario-test`.)
+- [ ] Changing an unrelated View Option (e.g. iCloud status) keeps Sort By / Stacks on "Finder's Setting" if that is what they were.
 
 ## Stacks and sorting
 - [ ] Single click on a stack expands it in place (items appear after it, others shift); click again collapses.

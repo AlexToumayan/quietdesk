@@ -18,6 +18,12 @@ jobs:
         run: .build/release/QuietDesk --self-test
       - name: Unit tests
         run: swift test
+      - name: Scenario test (real windows, synthesized clicks, fixture desktop)
+        run: |
+          D="$RUNNER_TEMP/fixture-desktop"
+          mkdir -p "$D/Project A" "$D/Project B" "$D/Archive"
+          for f in notes.txt report.txt data.csv todo.md; do echo "fixture" > "$D/$f"; done
+          .build/release/QuietDesk --scenario-test --defaults-suite dev.quietdesk.ci --desktop-dir "$D"
       - name: Bundle app
         run: ./scripts/build-app.sh
       - name: Upload app
