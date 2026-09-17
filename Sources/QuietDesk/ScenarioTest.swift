@@ -97,6 +97,20 @@ final class ScenarioTest {
             expect(opened == [url], "double-click on a folder should open it (opened: \(opened.count))")
         }))
         guard stacks else { return }
+        steps.append(("Finder comes forward after a desktop click", { [self] in
+            guard Settings.shared.activateFinderOnDesktopClick, let f = folderCell else { return }
+            click(f)   // one click; the activation completes asynchronously before the next step
+        }))
+        steps.append(("Finder is the active app", { [self] in
+            guard Settings.shared.activateFinderOnDesktopClick else { return }
+            let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first
+            let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "?"
+            // Locked screen or a headless CI session: nothing can be frontmost, so nothing to check.
+            if front == "com.apple.loginwindow" || front == "?" { print("skip: no frontmost app to hand off to (\(front))"); return }
+            // NSApp.isActive is not the criterion: an accessory app with a key panel can report
+            // itself active while Finder owns the menu bar. What people see is the frontmost app.
+            expect(front == "com.apple.finder" && finder?.isActive == true, "with Bring Finder Forward on, Finder should be frontmost after a desktop click (front: \(front))")
+        }))
         steps.append(("stack expands on a single click", { [self] in
             guard let s = stackCell, let title = s.entry.stack?.title, let before = view?.cells.count else { return }
             click(s)

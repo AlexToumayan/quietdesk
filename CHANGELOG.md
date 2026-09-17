@@ -18,6 +18,8 @@
 - Overlay windows: the icon window (desktop icons +2) and the shield (+1) now sit on two distinct
   window levels, so no reordering by AppKit can put the shield above the icons.
 - View Options panel sizes itself to its content.
+- Fixed: while QuietDesk itself was the active app (after View Options, Quick Look or a menu), a
+  desktop click did not hand the menu bar back to Finder; it now passes activation the macOS 14 way.
 - Diagnostics: `--scenario-test` replays real click sequences through the overlay windows (346
   checks across 19 View Options and activation states) and runs in CI on a fixture desktop;
   `--debug-log` writes an event trace to `~/Library/Logs/QuietDesk/debug.log` for bug reports.

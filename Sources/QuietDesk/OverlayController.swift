@@ -336,7 +336,7 @@ final class OverlayController: DesktopSurfaceDelegate {
     private var keyReassertObserver: NSObjectProtocol?
 
     func surfaceDidReceiveClick() {
-        DebugLog.log("surfaceDidReceiveClick bringFinderForward=\(settings.activateFinderOnDesktopClick) active=\(NSApp.isActive) key=\(windows.first(where: { $0.isKeyWindow })?.windowNumber ?? 0)")
+        DebugLog.log("surfaceDidReceiveClick bringFinderForward=\(settings.activateFinderOnDesktopClick) active=\(NSApp.isActive) front=\(NSWorkspace.shared.frontmostApplication?.localizedName ?? "?") key=\(windows.first(where: { $0.isKeyWindow })?.windowNumber ?? 0)")
         guard settings.activateFinderOnDesktopClick else { NSApp.activate(ignoringOtherApps: true); return }
         guard let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first, !finder.isActive,
               let keyWindow = windows.first(where: { $0.isKeyWindow }) else { return }
@@ -351,7 +351,13 @@ final class OverlayController: DesktopSurfaceDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
             if let o = self?.keyReassertObserver { NotificationCenter.default.removeObserver(o); self?.keyReassertObserver = nil }
         }
-        finder.activate()
+        // macOS 14 cooperative activation: while QuietDesk is the active app (View Options, Quick
+        // Look, a menu) it must PASS activation with activate(from:); otherwise the click the person
+        // just made on our panel entitles a plain activate(). NSApp.isActive can read true while
+        // Finder is frontmost (accessory app with a key panel), so try the hand-off first and fall back.
+        var ok = NSApp.isActive && finder.activate(from: .current, options: [])
+        if !ok { ok = finder.activate() }
+        DebugLog.log("finder.activate -> \(ok)")
     }
 
     func surface(toggleStack stack: StackGroup) {
