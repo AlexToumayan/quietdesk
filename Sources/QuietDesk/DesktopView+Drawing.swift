@@ -75,7 +75,7 @@ extension DesktopView {
     /// Cloud-status glyph after the label and tag colour dots before it (Finder's desktop style).
     func drawBadges(for item: DesktopItem, cell: LayoutCell) {
         // Cloud status
-        if item.isUbiquitous, let d = delegate {
+        if item.isUbiquitous, let d = delegate, d.showsCloudStatus {
             let status = d.surface(cloudStatusFor: item.url)
             let name: String?
             switch status {

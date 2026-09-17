@@ -301,6 +301,7 @@ final class OverlayController: DesktopSurfaceDelegate {
 
     var showsPreviews: Bool { options.showIconPreview }
     var showsItemInfo: Bool { options.showItemInfo }
+    var showsCloudStatus: Bool { options.showCloudStatus }
     var isManualLayout: Bool { model?.isManual ?? false }
 
     private var keyReassertObserver: NSObjectProtocol?

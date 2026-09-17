@@ -88,6 +88,8 @@ struct ViewOptions: Equatable {
     var labelOnBottom: Bool
     var showItemInfo: Bool
     var showIconPreview: Bool
+    /// Cloud glyph on iCloud items (Finder shows one; at tight spacings some people prefer none).
+    var showCloudStatus: Bool = true
 
     static let iconSizes: [CGFloat] = [16, 32, 36, 48, 64, 72, 96, 128]
     static let textSizes: [CGFloat] = [10, 11, 12, 13, 14, 15, 16]
@@ -99,7 +101,8 @@ struct ViewOptions: Equatable {
 
     var dictionary: [String: Any] {
         ["iconSize": iconSize, "gridSpacing": gridSpacing, "textSize": textSize,
-         "labelOnBottom": labelOnBottom, "showItemInfo": showItemInfo, "showIconPreview": showIconPreview]
+         "labelOnBottom": labelOnBottom, "showItemInfo": showItemInfo, "showIconPreview": showIconPreview,
+         "showCloudStatus": showCloudStatus]
     }
 
     init(iconSize: CGFloat, gridSpacing: CGFloat, textSize: CGFloat, labelOnBottom: Bool, showItemInfo: Bool, showIconPreview: Bool) {
@@ -112,6 +115,7 @@ struct ViewOptions: Equatable {
         self.init(iconSize: i, gridSpacing: g, textSize: t,
                   labelOnBottom: d["labelOnBottom"] as? Bool ?? true, showItemInfo: d["showItemInfo"] as? Bool ?? false,
                   showIconPreview: d["showIconPreview"] as? Bool ?? true)
+        showCloudStatus = d["showCloudStatus"] as? Bool ?? true
     }
 }
 
