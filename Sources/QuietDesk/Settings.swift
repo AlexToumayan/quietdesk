@@ -127,7 +127,14 @@ struct ViewOptions: Equatable {
 final class Settings {
     static let shared = Settings()
     /// One preferences domain for the bundle and the bare developer executable.
-    static let defaults = UserDefaults(suiteName: "dev.quietdesk.QuietDesk") ?? .standard
+    static let defaults: UserDefaults = {
+        // Tests run against a private suite so they never touch the person's own settings.
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "--defaults-suite"), i + 1 < args.count, let d = UserDefaults(suiteName: args[i + 1]) { return d }
+        // Inside the bundle this IS the standard domain; the bare executable (no bundle id) uses the same one.
+        if Bundle.main.bundleIdentifier == "dev.quietdesk.QuietDesk" { return .standard }
+        return UserDefaults(suiteName: "dev.quietdesk.QuietDesk") ?? .standard
+    }()
     private let defaults = Settings.defaults
     private init() {}
 

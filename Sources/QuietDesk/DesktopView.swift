@@ -64,6 +64,10 @@ final class DesktopView: NSView, NSDraggingSource, NSTextFieldDelegate, QLPrevie
     var focusIndex: Int?
     var dropTargetIndex: Int?
     var mouseDownCell: Int?
+    /// The item under the first click of a possible double-click. A collapse relayout can move
+    /// it away from the pointer before the second click arrives, so it is found again by URL.
+    var lastClickURL: URL?
+    var lastClickTime: TimeInterval = 0
     var mouseDownPoint = NSPoint.zero
     var didDrag = false
     var bandStart: NSPoint?
@@ -195,7 +199,15 @@ final class DesktopView: NSView, NSDraggingSource, NSTextFieldDelegate, QLPrevie
         if let n = i { invalidate(n) }
     }
 
+    /// Test hook: when set, receives the URLs instead of NSWorkspace opening them.
+    static var openHandler: (([URL]) -> Void)?
+
     func open(_ indices: [Int]) {
+        DebugLog.log("open \(indices.map { $0 < cells.count ? cells[$0].entry.displayName : "?" })")
+        if let handler = DesktopView.openHandler {
+            handler(indices.compactMap { $0 < cells.count ? cells[$0].entry.url : nil })
+            return
+        }
         for i in indices where i < cells.count {
             switch cells[i].entry {
             case .item(let item): NSWorkspace.shared.open(item.url)

@@ -51,6 +51,7 @@ final class OverlayController: DesktopSurfaceDelegate {
     /// recompute the grid from the current model without rescanning the folder.
     func applyViewOptions() {
         options = settings.effectiveViewOptions(finder: prefs)
+        DebugLog.log("applyViewOptions icon=\(Int(options.iconSize)) spacing=\(Int(options.gridSpacing)) text=\(Int(options.textSize)) bottom=\(options.labelOnBottom) info=\(options.showItemInfo) previews=\(options.showIconPreview) cloud=\(options.showCloudStatus) hover=\(options.hoverReveal)")
         guard let model else { return }
         let metrics = GridMetrics.from(options: options)
         let layouts = layout(model, metrics: metrics)
@@ -68,6 +69,7 @@ final class OverlayController: DesktopSurfaceDelegate {
         visible = true
         shields.forEach { $0.orderFrontRegardless() }
         windows.forEach { $0.orderFrontRegardless() }   // icon windows above their shields
+        traceWindows("show")
     }
 
     /// "Desktop Items › Hidden": the icons go away but the shields stay, so wallpaper clicks
@@ -76,6 +78,7 @@ final class OverlayController: DesktopSurfaceDelegate {
         visible = false
         windows.forEach { $0.orderOut(nil) }
         shields.forEach { $0.orderFrontRegardless() }
+        traceWindows("hide")
     }
 
     func startWatching() {
@@ -133,6 +136,8 @@ final class OverlayController: DesktopSurfaceDelegate {
             view.cells = layout.cells.map { $0.shifted(by: region.origin) }
         }
         log.notice("relayout after desktop change: \(model.entries.count) entries")
+        DebugLog.log("relayout: \(model.entries.count) entries, expanded=\(expandedStacks)")
+        traceWindows("after relayout")
     }
 
     func rebuildWindows() {
@@ -143,6 +148,12 @@ final class OverlayController: DesktopSurfaceDelegate {
     }
 
     var listingFailed: Bool { model?.listingFailed ?? false }
+    var expandedStackTitles: Set<String> { expandedStacks }
+
+    private func traceWindows(_ what: String) {
+        guard DebugLog.enabled else { return }
+        DebugLog.log("\(what): \(DebugLog.windowOrder(icons: windows, shields: shields))")
+    }
 
     private func reloadModel() {
         prefs = FinderDesktopPrefs.load()
@@ -249,13 +260,13 @@ final class OverlayController: DesktopSurfaceDelegate {
         let layouts = layout(model, metrics: metrics)
         windows = []; shields = []; views = []; shieldViews = []
         for layout in layouts {
-            let shield = OverlayWindow(frame: layout.screen.frame, canBecomeKey: false)
+            let shield = OverlayWindow(frame: layout.screen.frame, canBecomeKey: false, levelOffset: 1)
             let shieldView = ShieldView(frame: NSRect(origin: .zero, size: layout.screen.frame.size))
             shieldView.delegate = self
             shield.contentView = shieldView
 
             let region = Layout.windowRegion(for: layout, metrics: metrics)
-            let window = OverlayWindow(frame: Layout.cocoaFrame(region, on: layout.screen))
+            let window = OverlayWindow(frame: Layout.cocoaFrame(region, on: layout.screen), levelOffset: 2)
             let view = DesktopView(frame: NSRect(origin: .zero, size: region.size), metrics: metrics)
             view.labelMode = labelMode
             view.delegate = self
@@ -325,6 +336,7 @@ final class OverlayController: DesktopSurfaceDelegate {
     private var keyReassertObserver: NSObjectProtocol?
 
     func surfaceDidReceiveClick() {
+        DebugLog.log("surfaceDidReceiveClick bringFinderForward=\(settings.activateFinderOnDesktopClick) active=\(NSApp.isActive) key=\(windows.first(where: { $0.isKeyWindow })?.windowNumber ?? 0)")
         guard settings.activateFinderOnDesktopClick else { NSApp.activate(ignoringOtherApps: true); return }
         guard let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first, !finder.isActive,
               let keyWindow = windows.first(where: { $0.isKeyWindow }) else { return }
@@ -345,6 +357,7 @@ final class OverlayController: DesktopSurfaceDelegate {
     func surface(toggleStack stack: StackGroup) {
         // One Stack open at a time, like Finder.
         if expandedStacks.contains(stack.title) { expandedStacks.removeAll() } else { expandedStacks = [stack.title] }
+        DebugLog.log("toggleStack '\(stack.title)' -> expanded=\(expandedStacks)")
         reloadAndRelayout()
     }
 

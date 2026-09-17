@@ -8,7 +8,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var controller: OverlayController?
     private var weSetHideKey = false
     private let args = CommandLine.arguments
-    private var noHide: Bool { args.contains("--no-hide") }
+    private var noHide: Bool { args.contains("--no-hide") || scenarioTest }
+    private var scenarioTest: Bool { args.contains("--scenario-test") }
     private var sigterm: DispatchSourceSignal?
     private let menu = NSMenu()
 
@@ -43,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         recoverFromPreviousRun()
         installSignalHandler()
         ViewOptionsWindowController.shared.onChange = { [weak self] in
+            DebugLog.log("view options changed")
             self?.controller?.applyViewOptions()
             self?.controller?.reloadAndRelayout()   // sort/stacks changes need the model
             self?.rebuildMenu()
@@ -58,7 +60,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if args.contains("--icon-candidates") { Diagnostics.renderIconCandidates(); exit(0) }
         showWelcomeOnce()
-        if settings.enabled { enable() }
+        if DebugLog.enabled { DebugLog.log("launch pid=\(ProcessInfo.processInfo.processIdentifier) enabled=\(settings.enabled) version=\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")") }
+        if settings.enabled || scenarioTest { enable() }
+        if scenarioTest {
+            guard let c = controller else { print("scenario test: overlay could not be prepared (Desktop access?)"); exit(2) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { ScenarioTest(controller: c).start() }
+        }
 
         if let i = args.firstIndex(of: "--test-seconds"), i + 1 < args.count, let s = Double(args[i + 1]) {
             DispatchQueue.main.asyncAfter(deadline: .now() + s) { NSApp.terminate(nil) }
@@ -90,7 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// One-time note so nobody is surprised by their icons changing hands.
     private func showWelcomeOnce() {
-        guard !args.contains("--test-seconds"), !Settings.defaults.bool(forKey: "welcomeShown") else { return }
+        guard !args.contains("--test-seconds"), !scenarioTest, !Settings.defaults.bool(forKey: "welcomeShown") else { return }
         Settings.defaults.set(true, forKey: "welcomeShown")
         let alert = NSAlert()
         alert.messageText = "QuietDesk is in your menu bar"
@@ -104,6 +111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func enable() {
         guard controller == nil else { return }
+        DebugLog.log("enable")
         let c = OverlayController(labelMode: settings.labelMode)
         c.menuExtrasProvider = { [weak self] in self?.contextMenuExtras() ?? [] }
         c.prepare()                                       // replacement is ready before anything is hidden
@@ -133,6 +141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func disable() {
         guard let c = controller else { return }
+        DebugLog.log("disable")
         c.stop()
         controller = nil
         restoreNativeDesktop()
@@ -422,6 +431,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         test("gutter beside the cell", NSPoint(x: cell.cellRect.minX + 1, y: cell.iconRect.midY))
         for d in [8, 16, 24, 32, 48, 64] { test("\(d) px left of the window's first fill", NSPoint(x: cell.iconRect.minX - 4 - CGFloat(d), y: cell.iconRect.midY)) }
         test("window corner", NSPoint(x: 2, y: 2))
-        print("QuietDesk window number \(w.windowNumber); level \(w.level.rawValue)")
+        print("QuietDesk window number \(w.windowNumber); level \(w.level.rawValue); shield level \(c.shields.first?.level.rawValue ?? 0)")
+        // Z-order of our own windows (front to back), independent of whatever app windows cover the desktop.
+        func order(_ label: String) {
+            let list = (CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]) ?? []
+            let mine = list.compactMap { e -> String? in
+                guard let n = e[kCGWindowNumber as String] as? Int else { return nil }
+                if c.windows.contains(where: { $0.windowNumber == n }) { return "icons#\(n)" }
+                if c.shields.contains(where: { $0.windowNumber == n }) { return "shield#\(n)" }
+                return nil
+            }
+            print("z-order \(label): " + mine.joined(separator: " > "))
+        }
+        order("at start")
+        // Reproduce: activating the app (as opening View Options does) must not change who gets the click.
+        NSApp.activate(ignoringOtherApps: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            order("after app activation")
+            ViewOptionsWindowController.shared.show()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                order("after View Options opened")
+                ViewOptionsWindowController.shared.close()
+                c.applyViewOptions(); c.reloadAndRelayout()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { order("after view-option relayout") }
+            }
+        }
     }
 }

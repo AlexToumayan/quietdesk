@@ -67,9 +67,14 @@ struct DesktopModel {
     /// Manual arrangement: positions come from Finder, not from a sort order.
     var isManual: Bool { arrangeBy == .none || arrangeBy == .grid }
 
-    static var desktopURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop", isDirectory: true)
-    }
+    /// ~/Desktop, or the folder given with `--desktop-dir` (tests run against a fixture folder).
+    static let desktopURL: URL = {
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "--desktop-dir"), i + 1 < args.count {
+            return URL(fileURLWithPath: args[i + 1], isDirectory: true).standardizedFileURL
+        }
+        return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop", isDirectory: true)
+    }()
 
     static func scan(prefs: FinderDesktopPrefs, settings: Settings, expandedStacks: Set<String>, now: Date = Date(), forceArrangeBy: FinderDesktopPrefs.ArrangeBy? = nil) -> DesktopModel {
         let arrangeBy = forceArrangeBy ?? settings.sortKey.arrangeBy ?? prefs.arrangeBy

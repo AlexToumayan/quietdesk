@@ -7,10 +7,18 @@ extension DesktopView {
         cells.firstIndex { $0.iconRect.insetBy(dx: -4, dy: -4).contains(point) || $0.labelRect.contains(point) }
     }
 
+    /// For the second click of a double-click: the cell of the item the first click landed on,
+    /// wherever the layout has moved it since (nil when there was no such item or too long ago).
+    func firstClickTarget(for event: NSEvent) -> Int? {
+        guard event.clickCount >= 2, let url = lastClickURL, event.timestamp - lastClickTime < NSEvent.doubleClickInterval * 2 else { return nil }
+        return cells.firstIndex { $0.entry.url == url }
+    }
+
     override func mouseDown(with event: NSEvent) {
         if renameField != nil { commitRename() }
         pendingRenameClick?.cancel(); pendingRenameClick = nil
         let p = convert(event.locationInWindow, from: nil)
+        DebugLog.log("icons mouseDown at \(Int(p.x)),\(Int(p.y)) \(DebugLog.describe(event)) cell=\(cellIndex(at: p).map { "\($0) \(cells[$0].entry.isStack ? "stack" : "item") \(cells[$0].entry.displayName)" } ?? "none") key=\(window?.isKeyWindow ?? false) active=\(NSApp.isActive)")
         mouseDownPoint = p
         didDrag = false
         bandStart = nil
@@ -18,14 +26,22 @@ extension DesktopView {
         window?.makeFirstResponder(self)
         delegate?.surfaceDidReceiveClick()
         let cmd = event.modifierFlags.contains(.command), shift = event.modifierFlags.contains(.shift)
-        guard let i = cellIndex(at: p) else {
-            mouseDownCell = nil
+        // The second click of a double-click belongs to the item the first click hit, even if a
+        // collapse relayout has since moved that item (or the whole window) from under the pointer.
+        guard var i = firstClickTarget(for: event) ?? cellIndex(at: p) else {
+            mouseDownCell = nil; lastClickURL = nil
             if !cmd && !shift { select([]); setFocus(nil); delegate?.surfaceCollapseStacks() }
             bandStart = p
             return
         }
         // Clicking anything that is not a Stack or one of an open Stack's members collapses Stacks.
-        if !cells[i].entry.isStack, cells[i].entry.item?.stackTitle == nil { delegate?.surfaceCollapseStacks() }
+        // Collapsing relayouts synchronously, so find the clicked item again in the new cells.
+        if !cells[i].entry.isStack, cells[i].entry.item?.stackTitle == nil, let url = cells[i].entry.url {
+            delegate?.surfaceCollapseStacks()
+            guard let again = cells.firstIndex(where: { $0.entry.url == url }) else { mouseDownCell = nil; return }
+            i = again
+        }
+        if event.clickCount == 1 { lastClickURL = cells[i].entry.url; lastClickTime = event.timestamp }
         let wasSoleSelection = selection == [i]
         mouseDownCell = i
         if cmd {
@@ -37,7 +53,9 @@ extension DesktopView {
         }
         setFocus(i)
         if event.clickCount == 2 {
-            open([i])
+            // A Stack toggles on the first click (mouse up); the second click of a double-click
+            // must not open a Finder window on top of that.
+            if !cells[i].entry.isStack { open([i]) }
         } else if event.clickCount == 1, wasSoleSelection, !cmd, !shift, cells[i].labelRect.contains(p), cells[i].entry.url != nil {
             // Finder: a second, slow click on a selected name starts renaming.
             let work = DispatchWorkItem { [weak self] in self?.beginRename(i) }
@@ -75,6 +93,7 @@ extension DesktopView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        DebugLog.log("icons mouseUp \(DebugLog.describe(event)) downCell=\(mouseDownCell.map(String.init) ?? "none") dragged=\(didDrag) band=\(bandStart != nil)")
         defer { mouseDownCell = nil }
         if bandStart != nil { bandStart = nil; bandHost?.showRubberBand(screenRect: nil); return }
         // Single click on a Stack toggles it, like Finder.

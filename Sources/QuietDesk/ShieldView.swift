@@ -31,6 +31,14 @@ final class ShieldView: NSView, RubberBandHost {
     }
 
     override func mouseDown(with event: NSEvent) {
+        DebugLog.log("shield mouseDown \(DebugLog.describe(event))")
+        // The first click of a double-click collapsed a Stack and the icon window shrank away
+        // from under the pointer: the second click still means "open what I clicked".
+        if let v = iconView, let target = v.firstClickTarget(for: event) {
+            focusIconView()
+            v.open([target])
+            return
+        }
         focusIconView()
         if !event.modifierFlags.contains(.command) && !event.modifierFlags.contains(.shift) {
             iconView?.clearSelection()

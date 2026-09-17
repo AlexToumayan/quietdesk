@@ -12,13 +12,17 @@ import AppKit
 /// The full-screen shield below keeps a 1/255-alpha layer as a second line of defence.
 final class OverlayWindow: NSPanel {
     private let keyable: Bool
+    /// 1 for the shield, 2 for the icon window: two distinct levels, so nothing (app activation,
+    /// window ordering by AppKit) can ever put the shield above the icons.
+    private let levelOffset: Int
 
-    init(frame: NSRect, canBecomeKey keyable: Bool = true) {
+    init(frame: NSRect, canBecomeKey keyable: Bool = true, levelOffset: Int = 2) {
         self.keyable = keyable
+        self.levelOffset = levelOffset
         super.init(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         // NSPanel: isFloatingPanel rewrites `level`, so it must be set BEFORE the desktop level.
         isFloatingPanel = false
-        level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
+        level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + levelOffset)
         isOpaque = false
         backgroundColor = .clear
         hasShadow = false
@@ -41,6 +45,6 @@ final class OverlayWindow: NSPanel {
     /// Guard against anything (AppKit or a future change) moving the panel off the desktop level.
     override var level: NSWindow.Level {
         get { super.level }
-        set { super.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1) }
+        set { super.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + levelOffset) }
     }
 }

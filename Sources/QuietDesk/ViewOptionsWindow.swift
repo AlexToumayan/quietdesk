@@ -100,6 +100,9 @@ final class ViewOptionsWindowController: NSWindowController {
             grid.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -16),
             grid.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor, constant: -16),
         ])
+        content.layoutSubtreeIfNeeded()
+        let fit = grid.fittingSize
+        window?.setContentSize(NSSize(width: max(320, fit.width + 32), height: fit.height + 32))
     }
 
     // MARK: - State
@@ -136,8 +139,10 @@ final class ViewOptionsWindowController: NSWindowController {
         o.showCloudStatus = cloudStatus.state == .on
         o.hoverReveal = max(0, hoverReveal.indexOfSelectedItem)
         settings.viewOptions = o
-        settings.stacksMode = stackModes[max(0, stackBy.indexOfSelectedItem)]
-        settings.sortKey = sortKeys[max(0, sortBy.indexOfSelectedItem)]
+        // Only the popup that was used changes Sort By / Stacks; any other control must leave
+        // "follow Finder's setting" alone.
+        if let s = sender as AnyObject?, s === stackBy { settings.stacksMode = stackModes[max(0, stackBy.indexOfSelectedItem)] }
+        if let s = sender as AnyObject?, s === sortBy { settings.sortKey = sortKeys[max(0, sortBy.indexOfSelectedItem)] }
         iconSizeLabel.stringValue = "\(Int(o.iconSize)) × \(Int(o.iconSize))"
         onChange?()
     }
