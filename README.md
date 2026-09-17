@@ -1,5 +1,7 @@
 # QuietDesk
 
+[![CI](https://github.com/AlexToumayan/quietdesk/actions/workflows/ci.yml/badge.svg)](https://github.com/AlexToumayan/quietdesk/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/AlexToumayan/quietdesk)](https://github.com/AlexToumayan/quietdesk/releases) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A small, native macOS menu-bar utility that keeps your desktop icons where they are and shows their
 names only when you hover over them (or select them). No files are renamed, moved, hidden or changed.
 
