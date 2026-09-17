@@ -68,6 +68,7 @@ QuietDesk was built in one AI-assisted session from a written product brief, wit
 (can native labels be controlled at all?) settled by research and experiments before anything was
 built, and the code adversarially reviewed before release. The whole trail is in the repository:
 
+- [docs/CONCEPTS.md](docs/CONCEPTS.md): the ideas behind it, explained for humans.
 - [docs/BRIEF.md](docs/BRIEF.md): the original brief.
 - [docs/CASE-STUDY.md](docs/CASE-STUDY.md): the process, decisions and numbers.
 - [docs/PROMPTS.md](docs/PROMPTS.md): every agent prompt as a structured card; scripts in [docs/workflows/](docs/workflows/).

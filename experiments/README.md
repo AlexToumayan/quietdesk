@@ -1,5 +1,7 @@
 # Experiments
 
+**In plain words.** These are the small programs we ran on the real Mac to settle questions that documentation could not answer: does this setting really hide the icons, which window gets a click on a transparent pixel, will Finder accept tiny label text, where does Finder think the icons are. Each one is reversible and touches the live desktop for a few seconds at most; each section says what question it answers, how to run it, what it changes, and what happened on macOS 26.6.2. The ideas behind them are explained in [../docs/CONCEPTS.md](../docs/CONCEPTS.md).
+
 The scripts in this directory are the throwaway probes that produced the measurements in
 [docs/FEASIBILITY.md](../docs/FEASIBILITY.md), sections 3 and 4 (experiments E1–E12). They were written
 during the QuietDesk build session, one per question, and are kept so that every claim in the feasibility
@@ -55,10 +57,15 @@ which windows currently sit at or just above the desktop-icon level?
 `AEDeterminePermissionToAutomateTarget(..., askUserIfNeeded: false)` all report without prompting.
 
 **Result on 26.6.2.** Levels: desktop -2147483623, desktop icon -2147483603, normal 0. Two screens: the
-built-in Retina display at scale 2 (1728x1117 pt, menu bar 33 pt) and the external display at scale 1
-(1920x1080 pt). Finder owns one window per display at the desktop-icon level; window names are absent
-without Screen Recording, which the experiments never requested. The permission lines were not recorded
-in the feasibility document; for a bare executable macOS attributes them to the parent terminal process.
+built-in Retina display at scale 2 (1728x1117 pt, visible height 1084 pt, so a 33 pt menu bar) and the
+external display at scale 1 (1920x1080 pt, frame origin y = 1117, i.e. above the built-in one). The
+on-screen list at and just above the desktop-icon level contained only Dock, Wallpaper and Window Server
+windows: no Finder window was reported on screen at that moment. That gap is why probe2.swift (all windows,
+on or off screen) was written next; Finder's two desktop windows appear there. Window names are absent
+without Screen Recording, which the experiments never requested. Permissions, as recorded in the session
+log (they are not in the feasibility document): `AXIsProcessTrusted` false, `CGPreflightScreenCaptureAccess`
+false, Automation → Finder status -1744 (would prompt). For a bare executable macOS attributes these to the
+parent terminal process.
 
 ## probe2.swift and lowwin.swift
 
@@ -126,7 +133,7 @@ point; (3) do `NSTrackingArea` enter/exit events and `mouseMoved` still arrive a
 square when the script asks (twice, 5 s each). Total run time 16 s; the process quits itself.
 
 **What it changes.** Shows a full-screen transparent window on the main display with a red 120x120 pt
-square and the text "QuietDesk test" at (200, 500) pt from the top-left corner, for 16 s. Warps the cursor between the square and a
+square at (200, 500) pt from the top-left corner, labelled "QuietDesk test", for 16 s. Warps the cursor between the square and a
 clear area four times per phase and returns it to its original position. Nothing persists. Two literals are
 tied to the session machine: the clear test point `(600, 560)` assumes no icon there (on the session desktop
 the grid fills from the top-right), and phase 3 calls `order(.above, relativeTo: 61)`, where 61 was the
@@ -139,9 +146,11 @@ window number of Finder's built-in-display desktop window; read the current numb
 | Ordering | The test window orders in front of Finder's desktop window at the same level once shown |
 | Hit test, opaque point | Returns the test window |
 | Hit test, fully transparent point | Returns Finder's desktop window (the test window is skipped) |
-| Tracking with `ignoresMouseEvents = true` | Enter/exit still fired on the cursor warps |
+| Tracking with `ignoresMouseEvents = true` | Enter/exit still fired on the cursor warps (`entered=1 exited=1` in both warp phases) |
+| `mouseMoved` and the global monitor | Counted 0 in every phase: the warps produced no mouse-moved events, and no mouse movement was recorded during the two "move the mouse" phases either (`entered=0 exited=0 moved=0`) |
+| Phase 3: `ignoresMouseEvents = false`, then `order(.above, relativeTo: 61)` | Recorded as `inside-square -> window 61`, i.e. the hit test at the opaque point returned Finder's desktop window, not the test window. The feasibility document does not use this phase, and the session did not analyse it further; it is listed here because it was observed |
 
-The last row is what made "hover on a click-through window" plausible; the transparent-point row is the
+The tracking row is what made "hover on a click-through window" plausible; the transparent-point row is the
 documented hit-testing rule for windows with transparency at the point.
 
 ## alphatest4.swift
@@ -152,18 +161,19 @@ testing? If so, a near-invisible shield could not be used to catch clicks.
 **Build and run.** `swiftc -O -o alphatest4 alphatest4.swift && ./alphatest4`
 
 **What it changes.** Shows two 1000x700 pt borderless windows of its own at the desktop-icon level for about
-0.7 s: B, opaque grey everywhere, below A, which has a red opaque square, eight 60x60 patches at alpha 1, 4,
-16, 64, 128, 200, 250 and 255 of 255, and is transparent elsewhere. For each test point it walks the
+0.7 s: B, opaque grey everywhere, below A, which has an 80x80 red square drawn at alpha 0.9 (the output
+labels it "opaque red square"), eight 60x60 patches at alpha 1, 4, 16, 64, 128, 200, 250 and 255 of 255,
+and is transparent elsewhere. For each test point it walks the
 hit-test chain downward from the top and prints whether A is hit or skipped. Quits itself.
 
 **Result on 26.6.2 (E6).**
 
-| Point | Chain |
+| Point | Chain (as recorded: `A > B` or `B`) |
 |---|---|
-| Opaque red square | A |
+| Red square (alpha 0.9) | A > B |
 | Fully transparent | B (A skipped) |
-| Alpha 1/255 | A |
-| Alpha 4 … 255 / 255 | A |
+| Alpha 1/255 | A > B |
+| Alpha 4, 16, 64, 128, 200, 250, 255 / 255 | A > B, each one |
 
 There is no threshold above zero: one part in 255 is enough to be hit. QuietDesk's shield window is a single
 colour layer at alpha 1/255 because of this measurement.
@@ -187,7 +197,9 @@ app's first panel version set them the other way round and spent a 12 s run abov
 (E10) before the order was fixed and the `level` setter guarded.
 
 **Result on 26.6.2 (E11).** With `ignoresMouseEvents` left at its default, the panel behaves like the plain
-window: a fully transparent point passes to B, alpha 1/255 and above hit A. The second half of E11 (setting
+window: the red square and the alpha 1/255 patch hit A, a fully transparent point passes to B. The session
+ran this script as `./alphatest5 | head -4`, so only those three points were recorded for the panel; the
+patches from 4/255 upward were exercised but their output was not kept. The second half of E11 (setting
 `ignoresMouseEvents = false` explicitly makes the panel receive clicks everywhere in its frame, transparent
 pixels included) was measured in the app itself, not by this script; it matches the behaviour Apple
 described in the AppKit 10.3 release notes, and QuietDesk sets the property to `false` on purpose.
@@ -282,7 +294,7 @@ shows the last two bytes are not always zero.
 | `.DS_Store` `Iloc` records can drive the layout | dsstore_iloc.py | Rejected: 58 of 148, old layout |
 | A near-transparent shield might fall under an alpha threshold and be skipped | alphatest4.swift | Rejected: 1/255 is hit |
 | Alpha behaviour can be measured against Finder's real window | alphatest3 (discarded) | Invalid: no uncovered test region in 22 attempts; replaced by the two-window design |
-| Writing the hide key may report success without changing the visible desktop on Tahoe (Raycast extension report for 26.4.1), so a `CreateDesktop` + Finder relaunch would be needed | hide-toggle.sh | Not on 26.6.2: applies in about 2 s, same Finder pid, no relaunch |
+| Writing the hide key may report success without changing the visible desktop on Tahoe (Raycast extension pull request, verified by its author on 26.4.1), so a `CreateDesktop` + Finder relaunch would be needed | hide-toggle.sh | Not on 26.6.2: applies in about 2 s, same Finder pid, no relaunch |
 | A window at exactly the desktop-icon level is enough to receive clicks | hide-toggle.sh, hovertest.swift | Corrected: WindowManager adds its own window at that level while items are hidden, so the overlay sits at level + 1 |
 | `ignoresMouseEvents = true` also stops tracking-area events | hovertest.swift | Not observed: enter/exit fired on warps |
 | A non-activating `NSPanel` keeps the level it was given | alphatest5.swift, app (E10) | Corrected: `isFloatingPanel` rewrites `level`; set it first |
@@ -304,6 +316,7 @@ shows the last two bytes are not always zero.
 - Apple, `NSTrackingArea.Options.activeAlways`: https://developer.apple.com/documentation/appkit/nstrackingarea/options-swift.struct/activealways
 - Finder scripting dictionary: `/System/Library/CoreServices/Finder.app/Contents/Resources/Finder.sdef`
 - Community, WindowManager defaults keys: https://mynixos.com/nix-darwin/options/system.defaults.WindowManager
-- Community, Raycast issue on the hide-icons key under Tahoe: https://github.com/raycast/extensions/issues/8599
+- Community, Raycast issue listing the WindowManager keys (in its comments): https://github.com/raycast/extensions/issues/8599
+- Community, Raycast pull request that found the key unreliable on 26.4.1 and reverted to `CreateDesktop` (merged 2026-05-28): https://github.com/raycast/extensions/pull/28009
 - Community, `.DS_Store` format: https://metacpan.org/dist/Mac-Finder-DSStore/view/DSStoreFormat.pod , https://ds-store.readthedocs.io/en/latest/index.html
 - Community, Hammerspoon canvas note on desktopIcon + 1: https://github.com/Hammerspoon/hammerspoon/blob/master/extensions/canvas/libcanvas.m

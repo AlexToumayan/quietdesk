@@ -1,5 +1,11 @@
 # Prompt library
 
+**What this is.** When one AI delegates work to helper agents, the instructions it writes for
+them are the whole job: a vague instruction produces vague work, and a missing rule produces a
+helper that does something you did not want (like changing your desktop to test an idea). This
+page collects every instruction that was written for the helpers in this project, laid out the
+same way each time so you can see the pattern, and says what each one was for and what it caught.
+
 Every sub-agent in this project was driven by a prompt built from the same five parts. This page
 presents each prompt as a card in that structure, so the design of the delegation is readable
 without wading through code. The exact scripts are in [workflows/](workflows/) as the appendix.

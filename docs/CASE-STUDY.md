@@ -1,17 +1,23 @@
 # How QuietDesk was built
 
-A case study in directing AI agents to build a small, safety-critical macOS utility: one human
-product owner, one lead agent, and about fifty short-lived sub-agents in five orchestrated
-workflows, in a single session on 2026-09-16/17. The code is the product; this page is about the
-process, the guardrails and the evidence, because the interesting engineering here was deciding
-what could be built at all and proving it before building it.
+**If you only read one paragraph.** One person wanted a Mac desktop where the icons stay but the
+names only appear when you point at them. Nobody had built it, and it turned out there is no
+switch for it anywhere in macOS. So the work went like this: first find out, with Apple's own
+documents and small experiments, what the operating system will and will not allow; then stop and
+let the person decide whether the only workable route (drawing the icons ourselves) was worth its
+costs; then build it, have it torn apart by reviewers whose findings were fact-checked, fix what
+survived, and measure the result. One human directed one AI, which delegated to about fifty
+short-lived helpers in five organized rounds, all in a single session on 2026-09-16/17. This page
+tells that story; the plain-language explanations of the ideas involved are in
+[CONCEPTS.md](CONCEPTS.md).
 
-**Start here:** [the brief](BRIEF.md) → [feasibility](FEASIBILITY.md) → [prompt library](PROMPTS.md) → evidence ([research](evidence/research.md), [experiments](../experiments/README.md), [modules](evidence/modules.md), [code review](evidence/code-review.md)) → [validation checklist](VALIDATION-CHECKLIST.md).
+**Start here:** [concepts](CONCEPTS.md) → [the brief](BRIEF.md) → [feasibility](FEASIBILITY.md) → [prompt library](PROMPTS.md) → evidence ([research](evidence/research.md), [experiments](../experiments/README.md), [modules](evidence/modules.md), [code review](evidence/code-review.md)) → [validation checklist](VALIDATION-CHECKLIST.md).
 
 ## 1. What the brief asked for, and why it worked as a prompt
 
-The [brief](BRIEF.md) is a product document, not a feature list. Five properties made it a strong
-opening prompt:
+The [brief](BRIEF.md) is a product document, not a feature list, and that is why it worked. It
+told the AI what must never happen, what to prove before building, and how to be honest about
+the result. Five properties made it a strong opening prompt:
 
 1. **A non-negotiable invariant** ("preserve my actual desktop": no renames, moves, flags, aliases).
    Every later decision could be tested against it.
@@ -24,6 +30,9 @@ opening prompt:
    incomplete work"), which shaped every output schema downstream.
 
 ## 2. The shape of the work
+
+In one sentence: survey the machine, research the rules, run experiments, stop for the human's
+decision, build, review, fix, measure, hand over. The diagram shows the same thing.
 
 ```mermaid
 flowchart LR
@@ -54,6 +63,9 @@ flowchart LR
 
 ## 3. Five decisions, and the evidence behind each
 
+Each row is a fork in the road, what was chosen, and the specific fact that forced the choice
+(E-numbers are the experiments in [FEASIBILITY.md](FEASIBILITY.md)).
+
 | Decision | Evidence that forced it |
 |---|---|
 | Native Finder cannot do hover-only labels; a custom layer is the only mechanism. | No API in AppKit or Finder's dictionary; Finder Sync cannot touch rendering (Apple docs); Finder rejects a scripted text size below 10 (E3); `desktop position` and `.DS_Store` are stale on a sorted desktop (E2, E5). |
@@ -64,6 +76,9 @@ flowchart LR
 
 ## 4. What the process caught
 
+These are the things that would have reached a user if the reviewers and their fact-checkers had
+not been part of the process.
+
 - **Two blockers** the tests would not have found: a crash on relayout when the selection had more items than the new grid, and copying a folder into its own subfolder (a verifier reproduced 450 levels of recursion before the path limit).
 - **A silent data hazard**: hiding native icons even when Desktop access had been denied, leaving an empty desktop with no explanation.
 - **An architecture trap**: `NSPanel` resets its level when `isFloatingPanel` is set after `level`; a 12-second run put the overlay above application windows before the hit test exposed it (E10).
@@ -71,6 +86,9 @@ flowchart LR
 - **A wrong assumption in a brief**: the iCloud module was asked for Spotlight metadata queries; the implementer measured that they carry no iCloud attributes here and proposed a documented alternative instead of complying.
 
 ## 5. What it did not do
+
+Honesty about limits is part of the method, so here is what was deliberately not done or could
+not be checked without a person at the keyboard.
 
 - No sub-agent ever ran the app in live mode or changed a system preference; only the lead did, with capture and restore, for seconds at a time.
 - Nothing was screenshotted (no Screen Recording permission); visual claims were verified by rendering the overlay offline into PNGs, and the owner's own screenshot was used to check the layout column by column.
@@ -85,7 +103,7 @@ flowchart LR
 | Module implementation (two runs; the first hit a usage limit and was resumed with cached results) | 5 + 6 | 1.48 M | 265 | 58 min |
 | Code review, five lenses | 18 | 2.13 M | 297 | 30 min |
 | Code review, module integration | 4 | 0.60 M | 104 | 15 min |
-| Evidence documentation | 8 | see [evidence/](evidence/) | | |
+| Evidence documentation (this repo's evidence pages) | 8 | 1.44 M | 215 | 19 min |
 
 The lead agent's own work (survey, experiments, core implementation, integration, fixes, docs) is not
 counted above. Source size at v0.9.0: about 4,700 lines of Swift, no third-party dependencies.

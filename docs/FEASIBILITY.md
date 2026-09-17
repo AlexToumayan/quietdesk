@@ -6,6 +6,19 @@ Tools only (Swift 6.1, macOS 15.4 SDK, no Xcode). Two displays (built-in Retina 
 Added, icon size 36, text size 12, grid spacing 26, icon previews on, 148 items, iCloud Desktop sync on,
 one mounted disk image shown as a desktop volume.
 
+## 0. In plain words
+
+The question was whether a Mac can be made to show desktop icons without their names until you
+point at them. We checked every route that would keep Finder in charge of the icons, and each
+one is closed: there is no setting or programming interface for hiding names, Finder refuses to
+make the text smaller than 10 points, and Finder's plug-in mechanisms can only add badges and menu
+items. The one route that works is to ask macOS to hide Finder's icons (a normal switch in System
+Settings) and draw the icons ourselves in a transparent layer that sits just above the desktop and
+below every app window. The rest of this document is the evidence: what we read, what we tried on
+the real machine (each experiment was reversible and took seconds), what the layer must recreate,
+what it costs, and what could go wrong. A gentler explanation of each idea is in
+[CONCEPTS.md](CONCEPTS.md).
+
 ## 1. Conclusion in one paragraph
 
 Native Finder cannot show desktop labels only on hover, and nothing supported can hide its labels while
