@@ -18,6 +18,7 @@ final class ScenarioTest {
     private var steps: [(name: String, body: () -> Void)] = []
     private var eventNumber = 1000
     private var round = ""
+    private var frontWasOurs = true
 
     init(controller: OverlayController) {
         self.controller = controller
@@ -99,6 +100,8 @@ final class ScenarioTest {
         guard stacks else { return }
         steps.append(("Finder comes forward after a desktop click", { [self] in
             guard Settings.shared.activateFinderOnDesktopClick, let f = folderCell else { return }
+            let front = NSWorkspace.shared.frontmostApplication
+            frontWasOurs = front?.bundleIdentifier == "com.apple.finder" || front?.processIdentifier == ProcessInfo.processInfo.processIdentifier
             click(f)   // one click; the activation completes asynchronously before the next step
         }))
         steps.append(("Finder is the active app", { [self] in
@@ -107,6 +110,9 @@ final class ScenarioTest {
             let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "?"
             // Locked screen or a headless CI session: nothing can be frontmost, so nothing to check.
             if front == "com.apple.loginwindow" || front == "?" { print("skip: no frontmost app to hand off to (\(front))"); return }
+            // Someone is working in another app: a synthesized click is not user input, so macOS
+            // rightly refuses to take the foreground away from them. A real click is allowed to.
+            if !frontWasOurs { print("skip: another app was frontmost before the click (\(front))"); return }
             // NSApp.isActive is not the criterion: an accessory app with a key panel can report
             // itself active while Finder owns the menu bar. What people see is the frontmost app.
             expect(front == "com.apple.finder" && finder?.isActive == true, "with Bring Finder Forward on, Finder should be frontmost after a desktop click (front: \(front))")
@@ -222,6 +228,19 @@ final class ScenarioTest {
         addRound("Stacks off", stacks: false) { s.stacksMode = .off; vo.onChange?() }
         addRound("Stacks by Kind") { s.stacksMode = .kind; vo.onChange?() }
         addRound("Stacks by Date Added, Sort By Name") { s.stacksMode = .dateAdded; s.sortKey = .name; vo.onChange?() }
+        // Sort By > None on a Finder-sorted desktop: QuietDesk's own positions, Finder's grid. Only
+        // where Finder itself is sorted; otherwise positions come from Finder over Apple Events,
+        // which needs an Automation consent nobody can give in a test run.
+        if controller.prefs.arrangeBy != .none && controller.prefs.arrangeBy != .grid {
+            addRound("Sort By None (manual layout, own positions)") { s.sortKey = SortKey.none; vo.onChange?() }
+            steps.append(("layout is manual", { [self] in expect(controller.isManualLayout, "Sort By None should give a manual layout") }))
+            expectGrid(compact: false)
+            addRound("Sort By Date Added again") { s.sortKey = .dateAdded; vo.onChange?() }
+            steps.append(("layout is sorted again", { [self] in expect(!controller.isManualLayout, "Sort By Date Added should leave manual mode") }))
+            expectGrid(compact: true)
+        } else {
+            print("skip: manual-layout round (Finder is not sorted here, positions would need Finder automation)")
+        }
         addRound("View Options closed") { vo.close() }
         addRound("items hidden then shown again") { [self] in controller.hide(); controller.show() }
         addRound("Bring Finder Forward off") { s.activateFinderOnDesktopClick = false }

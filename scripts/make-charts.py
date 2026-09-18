@@ -42,10 +42,10 @@ def glance():
     tiles = [
         ("+0.00 s", "CPU time added, 40 s idle", "release build, no interaction"),
         ("75 MB", "resident memory, stable", "±0.4 MB across the run"),
-        ("43 / 43", "automated checks passing", "13 XCTest on CI + 30 self-test"),
-        ("15 fixed", "verified review defects", "1 claim rejected by a skeptic"),
+        ("563 / 563", "automated checks passing", "17 XCTest + 43 self-test + 503 scenario"),
+        ("29 fixed", "verified review defects", "two adversarial reviews, duplicates merged"),
     ]
-    b = [text(20, 30, "QuietDesk 0.9.1: results at a glance", 16, INK, weight="600")]
+    b = [text(20, 30, "QuietDesk: results at a glance", 16, INK, weight="600")]
     tw = (W - 40 - 3 * 16) / 4
     for i, (big, label, sub) in enumerate(tiles):
         x = 20 + i * (tw + 16)

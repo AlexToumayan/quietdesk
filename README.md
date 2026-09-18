@@ -113,7 +113,8 @@ built, and the code adversarially reviewed before release. The whole trail is in
 - `.build/release/QuietDesk --scenario-test --defaults-suite dev.quietdesk.scenario` drives the real
   overlay windows with synthesized clicks (Stack expand/collapse, member clicks, double-click open,
   wallpaper clicks) before and after every View Options change, with Finder brought forward between
-  clicks as on the real desktop; 346 checks, exit status 0 when all pass. CI runs it against a
+  clicks as on the real desktop; about 500 checks across 25 rounds (View Options, compact and Finder
+  grids, manual layout, label modes, activation states), exit status 0 when all pass. CI runs it against a
   fixture folder (`--desktop-dir`). It uses a private preferences suite and never hides the native
   desktop.
 - `scripts/measure-idle.sh [seconds]` reproduces the idle measurement.

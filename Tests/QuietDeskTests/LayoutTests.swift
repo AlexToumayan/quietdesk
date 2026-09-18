@@ -104,6 +104,25 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(sorted, ["file 2", "file 10"])
     }
 
+    /// A bare `.none` in SortKey.arrangeBy's Optional return type is Optional.none (nil).
+    func testSortByNoneIsArrangeByNoneNotNil() {
+        XCTAssertEqual(SortKey.none.arrangeBy, FinderDesktopPrefs.ArrangeBy.none)
+    }
+
+    /// Sort By > None (Finder Positions) on a Finder-sorted desktop must not fall back to Finder's sort.
+    func testSortByNoneOnASortedFinderDesktopIsManual() throws {
+        let suite = "dev.quietdesk.tests.sortkey"   // throwaway: never the person's own settings
+        let scratch = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { scratch.removePersistentDomain(forName: suite) }
+        let settings = Settings(defaults: scratch)
+        settings.sortKey = SortKey.none
+        var prefs = FinderDesktopPrefs()
+        prefs.arrangeBy = .dateAdded
+        let model = DesktopModel.scan(prefs: prefs, settings: settings, expandedStacks: [])
+        XCTAssertEqual(model.arrangeBy, FinderDesktopPrefs.ArrangeBy.none)
+        XCTAssertTrue(model.isManual)
+    }
+
     func testDateBuckets() {
         let now = Date(), cal = Calendar.current
         XCTAssertEqual(DesktopModel.dateBucket(now, now: now).0, "Today")

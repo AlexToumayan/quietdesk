@@ -221,7 +221,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func sortMenu(enabled: Bool) -> NSMenu {
-        let finderTitle = "Finder's Setting (\(SortKey.allCases.first { $0.arrangeBy == FinderDesktopPrefs.load().arrangeBy }?.title ?? "None"))"
+        // Finder's own "None" keeps the short fallback wording, not SortKey.none's "None (Finder Positions)".
+        let finderTitle = "Finder's Setting (\(SortKey.allCases.first { $0 != SortKey.none && $0.arrangeBy == FinderDesktopPrefs.load().arrangeBy }?.title ?? "None"))"
         var cases = SortKey.allCases.map { (title: $0.title, value: $0.rawValue) }
         cases[0].title = finderTitle
         return radioMenu(cases, current: settings.sortKey.rawValue, action: #selector(setSortKey(_:)), enabled: enabled)

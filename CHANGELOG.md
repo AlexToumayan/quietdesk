@@ -16,6 +16,9 @@
 - Fixed: a hover label could stay on screen after a window opened on top of the desktop without
   the pointer moving (e.g. after double-clicking a file); hover now ends when another app comes
   forward or the desktop loses keyboard focus.
+- Fixed: Sort By › None (Finder Positions) did nothing on a Finder-sorted desktop. In the Optional
+  return type a bare `.none` meant "no value", so the choice silently fell back to Finder's sort; it
+  now gives the manual layout with QuietDesk's own positions, and the scenario test clicks through it.
 - Stacks: one open at a time; clicking the wallpaper, another item, or Escape collapses it (Finder behaviour).
 - Fixed: double-clicking an item while a Stack was open collapsed the Stack on the first click, the
   layout shifted under the pointer, and the second click opened whatever had moved there (or
@@ -29,8 +32,8 @@
 - View Options panel sizes itself to its content.
 - Fixed: while QuietDesk itself was the active app (after View Options, Quick Look or a menu), a
   desktop click did not hand the menu bar back to Finder; it now passes activation the macOS 14 way.
-- Diagnostics: `--scenario-test` replays real click sequences through the overlay windows (346
-  checks across 19 View Options and activation states) and runs in CI on a fixture desktop;
+- Diagnostics: `--scenario-test` replays real click sequences through the overlay windows (about
+  500 checks across 25 View Options, layout and activation states) and runs in CI on a fixture desktop;
   `--debug-log` writes an event trace to `~/Library/Logs/QuietDesk/debug.log` for bug reports.
 - Documentation: figures for measurements, review outcomes, research verification, grid
   calibration, workflow sizes and the window-level stack (`scripts/make-charts.py`).

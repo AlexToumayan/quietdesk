@@ -34,7 +34,9 @@ enum SortKey: String, CaseIterable {
     var arrangeBy: FinderDesktopPrefs.ArrangeBy? {
         switch self {
         case .finder: return nil
-        case .none: return .none
+        // Spelled out: in this Optional return type a bare `.none` is Optional.none (nil), which
+        // would fall back to Finder's own sort instead of a manual layout.
+        case .none: return FinderDesktopPrefs.ArrangeBy.none
         case .name: return .name
         case .kind: return .kind
         case .dateAdded: return .dateAdded
@@ -139,8 +141,9 @@ final class Settings {
         if Bundle.main.bundleIdentifier == "dev.quietdesk.QuietDesk" { return .standard }
         return UserDefaults(suiteName: "dev.quietdesk.QuietDesk") ?? .standard
     }()
-    private let defaults = Settings.defaults
-    private init() {}
+    private let defaults: UserDefaults
+    /// The app only ever uses `shared`; tests pass a throwaway suite.
+    init(defaults: UserDefaults = Settings.defaults) { self.defaults = defaults }
 
     var enabled: Bool {
         get { defaults.object(forKey: "enabled") as? Bool ?? true }

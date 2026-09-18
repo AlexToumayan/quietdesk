@@ -73,6 +73,23 @@ enum SelfTest {
         let byName = [item("file 10", 0), item("file 2", 0)].sorted(by: DesktopModel.comparator(for: .name)).map { $0.name }
         check("name order is Finder-like (numeric aware)", byName == ["file 2", "file 10"])
 
+        // Sort By > None (Finder Positions) must be ArrangeBy.none. A bare `.none` there is
+        // Optional.none (nil), which falls back to Finder's sort and never goes manual.
+        check("Sort By None maps to ArrangeBy.none, not nil", SortKey.none.arrangeBy == FinderDesktopPrefs.ArrangeBy.none)
+        // scan() with a throwaway preferences suite, so the person's own settings are never touched.
+        let scratchSuite = "dev.quietdesk.selftest"
+        if let scratch = UserDefaults(suiteName: scratchSuite) {
+            let scratchSettings = Settings(defaults: scratch)
+            scratchSettings.sortKey = SortKey.none
+            var sortedFinder = FinderDesktopPrefs()
+            sortedFinder.arrangeBy = .dateAdded
+            let manualModel = DesktopModel.scan(prefs: sortedFinder, settings: scratchSettings, expandedStacks: [])
+            check("Sort By None on a Finder-sorted desktop is a manual layout", manualModel.arrangeBy == FinderDesktopPrefs.ArrangeBy.none && manualModel.isManual)
+            scratch.removePersistentDomain(forName: scratchSuite)
+        } else {
+            check("Sort By None on a Finder-sorted desktop is a manual layout (no scratch suite)", false)
+        }
+
         // Stacks group only files; folders stay separate.
         let files = [item("x.pdf", now.timeIntervalSince1970)]
         let stacks = DesktopModel.buildStacks(files: files, groupBy: "Date Added", now: now)
