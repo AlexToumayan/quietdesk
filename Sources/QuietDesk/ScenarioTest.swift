@@ -20,8 +20,11 @@ final class ScenarioTest {
     private var round = ""
     private var frontWasOurs = true
 
+    private let withReveal = CommandLine.arguments.contains("--with-reveal")
+
     init(controller: OverlayController) {
         self.controller = controller
+        controller.revealOnWallpaperClick = false   // never fling the person's windows about by surprise
         DesktopView.openHandler = { [weak self] urls in self?.opened += urls }
     }
 
@@ -162,9 +165,11 @@ final class ScenarioTest {
         steps.append(("wallpaper click collapses a Stack", { [self] in
             guard let s = stackCell else { return }
             click(s)
+            let before = controller.wallpaperClicks
             clickWallpaper()
             expect(expanded.isEmpty, "a click on the wallpaper should collapse the Stack")
             expect(view?.selection.isEmpty ?? false, "a click on the wallpaper should clear the selection")
+            expect(controller.wallpaperClicks == before + 1, "a plain click on the wallpaper should be reported as one")
         }))
         steps.append(("hover then click", { [self] in
             guard let s = stackCell, let view, let i = view.cells.firstIndex(where: { $0.entry.isStack }) else { return }
@@ -246,7 +251,31 @@ final class ScenarioTest {
         addRound("Bring Finder Forward off") { s.activateFinderOnDesktopClick = false }
         addRound("Bring Finder Forward on again") { s.activateFinderOnDesktopClick = true }
         addRound("reload desktop") { [self] in controller.reloadAndRelayout() }
+        if withReveal {
+            // The real thing (opt-in: it slides every window aside for about three seconds).
+            steps.append(("reveal: wallpaper click", { [self] in
+                round = "reveal desktop"
+                controller.revealOnWallpaperClick = true
+                expect(DesktopReveal.clickRevealsDesktop, "System Settings should have Click wallpaper to reveal desktop on for this round")
+                clickWallpaper()
+            }))
+            for _ in 0..<5 { steps.append(("reveal: waiting", {})) }
+            steps.append(("reveal: stepped aside", { [self] in
+                expect(DesktopReveal.isRevealed, "the desktop should be revealed after a wallpaper click")
+                expect(controller.steppedAside, "QuietDesk should step aside while the desktop is revealed")
+                expect(controller.windows.allSatisfy { !$0.isVisible } && controller.shields.allSatisfy { !$0.isVisible }, "no QuietDesk window should be on screen during a reveal")
+                if DesktopReveal.isRevealed { DesktopReveal.toggle() }   // end it the way F11 would (it is a toggle: only when revealed)
+            }))
+            for _ in 0..<7 { steps.append(("reveal: waiting", {})) }
+            steps.append(("reveal: back", { [self] in
+                expect(!DesktopReveal.isRevealed, "the reveal should have ended")
+                expect(!controller.steppedAside, "QuietDesk should come back when the reveal ends")
+                expect(controller.windows.contains { $0.isVisible } && controller.shields.allSatisfy { $0.isVisible }, "QuietDesk's windows should be back on screen")
+                controller.revealOnWallpaperClick = false
+            }))
+        }
         steps.append(("finish", { [self] in
+            if withReveal, DesktopReveal.isRevealed { DesktopReveal.toggle() }   // never leave the windows slid aside
             print("scenario test: \(checks) checks, \(failures.count) failed")
             for f in failures { print("  - \(f)") }
             print(failures.isEmpty ? "ALL PASSED" : "FAILED")

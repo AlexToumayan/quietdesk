@@ -9,6 +9,10 @@ final class ShieldView: NSView, RubberBandHost {
     weak var delegate: DesktopSurfaceDelegate?
     private var bandLayer: CALayer?
     private var downPoint: NSPoint?
+    private var dragged = false
+    /// Decided at mouse-down: a mouse-up's click count drops to 0 after a slow press, and the
+    /// modifiers that matter are the ones held when the button went down.
+    private var plainDown = false
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -32,6 +36,7 @@ final class ShieldView: NSView, RubberBandHost {
 
     override func mouseDown(with event: NSEvent) {
         DebugLog.log("shield mouseDown \(DebugLog.describe(event))")
+        plainDown = false
         // The first click of a double-click collapsed a Stack and the icon window shrank away
         // from under the pointer: the second click still means "open what I clicked".
         if let v = iconView, let target = v.firstClickTarget(for: event) {
@@ -45,19 +50,25 @@ final class ShieldView: NSView, RubberBandHost {
             delegate?.surfaceCollapseStacks()
         }
         downPoint = convert(event.locationInWindow, from: nil)
+        dragged = false
+        plainDown = event.clickCount == 1 && event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty
     }
 
     override func mouseDragged(with event: NSEvent) {
         guard let d = downPoint else { return }
         let p = convert(event.locationInWindow, from: nil)
+        if hypot(p.x - d.x, p.y - d.y) > 4 { dragged = true }
         let band = NSRect(x: min(p.x, d.x), y: min(p.y, d.y), width: abs(p.x - d.x), height: abs(p.y - d.y))
         showRubberBand(localRect: band)
         iconView?.selectCells(intersectingScreenRect: screenRect(band))
     }
 
     override func mouseUp(with event: NSEvent) {
+        let wasPlainClick = downPoint != nil && !dragged && plainDown
+        plainDown = false
         downPoint = nil
         showRubberBand(localRect: nil)
+        if wasPlainClick { delegate?.surfaceWallpaperClicked() }
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Reveal desktop works while QuietDesk is on: a plain click on the wallpaper slides the windows
+  aside (when System Settings has "Click wallpaper to reveal desktop" on), and for any reveal,
+  including F11, the spread gesture and hot corners, QuietDesk steps aside while macOS shows Finder's
+  own items and returns when the reveal ends. Before, F11 or the gesture produced doubled icons and
+  the wallpaper click did nothing. macOS sends no event for a reveal, so the state is read from the
+  window list once a second (about 1 ms). The wallpaper click uses a private Dock entry point that
+  fails safe. Experiment E14 in FEASIBILITY.md.
+- The View Options panel is laid out on first use instead of at launch (about 7 MB less at rest).
 - View Options panel follows Finder's: left-aligned sections between full-width rules, small and
   large document glyphs around the icon-size slider, 2×2 and 3×3 grid glyphs around grid spacing,
   dot stops under both sliders, "Label position:" above its choices, a close button only, and

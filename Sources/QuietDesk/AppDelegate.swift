@@ -148,8 +148,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 log.notice("hid native desktop items (previous value: \(String(describing: previous)))")
             }
         }
+        c.startWatching()                          // first: it learns whether the desktop is revealed right now
         if settings.itemsVisible { c.show() }
-        c.startWatching()
         rebuildMenu()
     }
 
@@ -328,6 +328,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         finderClick.state = settings.activateFinderOnDesktopClick ? .on : .off
         finderClick.toolTip = "On: the menu bar shows Finder when you click the desktop, as it does natively. Off: QuietDesk becomes the active app."
         menu.addItem(finderClick)
+        let reveal = NSMenuItem(title: "Click Wallpaper to Reveal Desktop", action: #selector(toggleRevealClick), keyEquivalent: "")
+        reveal.target = self
+        reveal.state = settings.revealDesktopOnWallpaperClick ? .on : .off
+        reveal.toolTip = "On: a plain click on the wallpaper slides every window aside, as on the native desktop, when System Settings › Desktop & Dock › \"Click wallpaper to reveal desktop\" allows it. While the desktop is revealed macOS shows Finder's own items, so QuietDesk steps aside until the reveal ends."
+        menu.addItem(reveal)
         let settingsItem = NSMenuItem(title: "Open Desktop & Dock Settings…", action: #selector(openDesktopSettings), keyEquivalent: "")
         settingsItem.target = self
         settingsItem.toolTip = "Fallback: the \"Show Items > On Desktop\" switch lives here if macOS ignores the automatic change."
@@ -408,6 +413,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 LoginItem.openSettings()
             }
         } catch { DesktopMenus.showError("Launch at Login could not be changed", error.localizedDescription) }
+        rebuildMenu()
+    }
+
+    @objc private func toggleRevealClick() {
+        settings.revealDesktopOnWallpaperClick.toggle()
         rebuildMenu()
     }
 

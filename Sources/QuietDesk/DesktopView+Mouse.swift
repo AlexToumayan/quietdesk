@@ -37,6 +37,8 @@ extension DesktopView {
         mouseDownPoint = p
         didDrag = false
         bandStart = nil
+        bandMoved = false
+        plainDown = event.clickCount == 1 && event.modifierFlags.intersection([.command, .shift, .option, .control]).isEmpty
         window?.makeKey()
         window?.makeFirstResponder(self)
         delegate?.surfaceDidReceiveClick()
@@ -82,6 +84,7 @@ extension DesktopView {
     override func mouseDragged(with event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
         if let d = bandStart {
+            if hypot(p.x - d.x, p.y - d.y) > 4 { bandMoved = true }
             let band = NSRect(x: min(p.x, d.x), y: min(p.y, d.y), width: abs(p.x - d.x), height: abs(p.y - d.y))
             bandHost?.showRubberBand(screenRect: screenRect(band))
             select(Set(cells.indices.filter { cells[$0].iconRect.union(cells[$0].labelRect).intersects(band) }))
@@ -110,7 +113,13 @@ extension DesktopView {
     override func mouseUp(with event: NSEvent) {
         DebugLog.log("icons mouseUp \(DebugLog.describe(event)) downCell=\(mouseDownCell.map(String.init) ?? "none") dragged=\(didDrag) band=\(bandStart != nil)")
         defer { mouseDownCell = nil }
-        if bandStart != nil { bandStart = nil; bandHost?.showRubberBand(screenRect: nil); return }
+        if bandStart != nil {
+            bandStart = nil; bandHost?.showRubberBand(screenRect: nil)
+            // A plain click between the icons is a click on the wallpaper.
+            if !bandMoved, plainDown { delegate?.surfaceWallpaperClicked() }
+            plainDown = false
+            return
+        }
         // Single click on a Stack toggles it, like Finder.
         if let i = mouseDownCell, !didDrag, event.clickCount == 1, let stack = cells[i].entry.stack,
            !event.modifierFlags.contains(.command), !event.modifierFlags.contains(.shift) {

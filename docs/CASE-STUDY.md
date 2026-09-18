@@ -60,7 +60,7 @@ flowchart LR
 | Decision | owner | "Build the custom layer to full parity, then test" |
 | Parity build | lead + 3 module implementers + 3 module reviewers | 13 feature areas, three modules with harness-verified behaviour ([evidence/modules.md](evidence/modules.md)) |
 | Code review | 6 reviewers + 21 verifiers | 15 confirmed defects fixed, 1 rejected, 28 minors triaged ([evidence/code-review.md](evidence/code-review.md)) |
-| Measurement | lead | Idle: constant CPU time over 40 s, ~75 MB resident (`scripts/measure-idle.sh`) |
+| Measurement | lead | Idle: 0.0 % CPU in every sample, +0.05 s CPU time over 50 s, ~84 MB resident (`scripts/measure-idle.sh`) |
 | Validation | owner | [VALIDATION-CHECKLIST.md](VALIDATION-CHECKLIST.md), demo video |
 
 ## 3. Five decisions, and the evidence behind each

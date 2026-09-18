@@ -68,8 +68,18 @@ desktop-icons level whose only job is to notice a click on the wallpaper and bri
 icons back. If QuietDesk let wallpaper clicks fall through, every click on empty desktop would
 make Finder's icons reappear underneath QuietDesk's. So while QuietDesk is enabled it owns every
 click on the desktop, and provides the things a wallpaper click used to do (deselect, rubber-band
-select, the right-click menu, drops) itself. The one thing it deliberately does not offer is the
-"click the wallpaper to reveal the desktop" gesture.
+select, the right-click menu, drops) itself.
+
+That left the "click the wallpaper to reveal the desktop" gesture, where every window slides
+aside. An experiment settled how to bring it back. Whenever the desktop is revealed, by a click,
+by F11 or by the trackpad gesture, macOS shows Finder's own icons again for as long as the reveal
+lasts, even though they are switched off. It does that for everyone who hides desktop items; a
+reveal means "show me everything". QuietDesk's icons on top of Finder's would be doubles, so
+QuietDesk steps aside while the desktop is revealed and returns the moment it ends. There is one
+catch: macOS tells nobody when a reveal starts or stops. We listened on every channel an app
+can listen on and heard nothing. The only trace is a window the Dock puts up for the duration,
+so QuietDesk glances at the list of windows once a second, which takes about a thousandth of a
+second, and that is the one piece of regular work it does at rest.
 
 ## 5. Why the names could not simply be hidden
 
@@ -162,14 +172,16 @@ first item on the validation checklist.
 
 ## 11. Doing nothing, measurably
 
-"Efficient" is easy to claim and easy to check. The app has no timers and no loops at rest; it
+"Efficient" is easy to claim and easy to check. At rest the app does one small thing: once a
+second it glances at the list of windows, which takes about a thousandth of a second, because
+that is the only way to notice that the desktop has been revealed (section 4). Otherwise it
 only wakes up when macOS tells it something happened: the pointer entered an icon, a file
 appeared on the Desktop, a disk was mounted, a display was plugged in, an iCloud status changed.
 Redraws touch only the icon that changed.
 
 We measured it the plain way: run the release build with the desktop taken over, do nothing for
-40 seconds, and sample the process. Its CPU time did not move at all, and it held about 75 MB of
-memory. The script to repeat this is `scripts/measure-idle.sh`.
+a minute, and sample the process. Every sample read 0.0 % CPU; over 50 seconds the process used
+five hundredths of a second in total, and it held about 84 MB of memory without growing. The script to repeat this is `scripts/measure-idle.sh`.
 
 ## 12. Undo, and why file operations are careful
 

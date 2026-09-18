@@ -33,6 +33,7 @@ Stacks        ▸   Finder's Setting ✓ / Off / Group by Kind / Date … / Tags
 Show View Options…
 Launch at Login
 Bring Finder Forward on Desktop Click  ✓
+Click Wallpaper to Reveal Desktop
 Open Desktop & Dock Settings…
 Reload Desktop
 About QuietDesk
@@ -79,8 +80,16 @@ Everything Finder's desktop does that people use, done by QuietDesk on its own l
 | Menu bar | Clicking the desktop brings Finder forward so the menu bar reads "Finder" (switchable); QuietDesk's panel keeps keyboard focus |
 | Accessibility | Every item exposes its name to VoiceOver even when labels are hidden |
 
-Not offered: "click the wallpaper to reveal desktop" (deliberately off while enabled, see
-FEASIBILITY.md), Finder's own menu-bar menus acting on QuietDesk's selection (they act on Finder's,
+**Reveal desktop.** Clicking the wallpaper slides every window aside, as it does natively, when
+System Settings › Desktop & Dock › "Click wallpaper to reveal desktop" is on; F11, the spread gesture
+and hot corners work too. macOS shows Finder's own desktop items, names included, for as long as the
+desktop is revealed (it does that for anyone who hides desktop items), so QuietDesk steps aside for
+the duration and comes back when the reveal ends. The click uses the Dock's own entry point for
+Show Desktop, which is not public API: it is looked up at run time, and if it is missing, or a
+requested reveal never shows up, wallpaper clicks go back to only deselecting. The menu has a
+switch for it (Click Wallpaper to Reveal Desktop).
+
+Not offered: Finder's own menu-bar menus acting on QuietDesk's selection (they act on Finder's,
 which is empty while items are hidden), Finder's "Show View Options" panel (use QuietDesk's Sort By
 and Stacks menus instead), and desktop widgets overlap testing (untested).
 
@@ -180,7 +189,7 @@ thumbnails are requested only for files that are fully local.
 - Because each rebuild changes the ad-hoc signature, macOS may ask for permissions again after
   rebuilding. Distributing a downloadable build to other people needs Developer ID signing and
   notarization (paid Apple Developer Program) or the "Open Anyway" flow on their side.
-- Untested so far: Show Desktop, Mission Control, Stage Manager, full-screen apps, sleep/wake,
+- Untested so far: Mission Control, Stage Manager, full-screen apps, sleep/wake,
   display connection changes, desktop widgets, and the "Bring Finder Forward" keyboard-focus
   behaviour. See the checklist.
 
@@ -215,10 +224,15 @@ QuietDesk stores only its menu choices and the restore record in that preference
 
 ![Idle measurement](docs/assets/idle-measurement.svg)
 
-Overlay enabled and idle for 40 s with the full feature set: CPU time constant at 0.22 s (0.0 % in
-every sample), resident memory about 75 MB, no timers at rest (one 120 ms timer runs while a hovered name fades in), no polling, no disk activity. Work happens only on hover, clicks, keys,
-a change in the Desktop folder, a volume mount, a display change, an iCloud status change, or when a
-thumbnail is first needed. Details and caveats in the feasibility document.
+Overlay enabled and idle for 60 s with the full feature set: 0.0 % CPU in every sample after
+launch, cumulative CPU time up by 0.05 s over 50 s (about a thousandth of one core), resident memory
+84 MB and flat, no disk activity. The one piece of regular work at rest is a look at the window list
+once a second (about 1 ms, with half a second of timer tolerance, paused while the displays sleep):
+macOS sends no event when the desktop is revealed, and QuietDesk has to step aside when it is
+(FEASIBILITY E14). There is no other timer or polling: one 120 ms timer runs while a hovered name
+fades in, and everything else happens on hover, clicks, keys, a change in the Desktop folder, a
+volume mount, a display change, an iCloud status change, or when a thumbnail is first needed.
+Details and caveats in the feasibility document.
 
 ## Project layout
 

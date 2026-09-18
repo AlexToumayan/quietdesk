@@ -7,7 +7,9 @@ cd "$(dirname "$0")/.."
 SECS="${1:-40}"
 BIN=".build/release/QuietDesk"
 test -x "$BIN" || swift build -c release >/dev/null
-"$BIN" --test-seconds "$SECS" >/dev/null 2>&1 &
+# A private settings suite: the run is always enabled with default options, whatever the
+# person's own QuietDesk settings are (a disabled app would measure nothing).
+"$BIN" --test-seconds "$SECS" --defaults-suite dev.quietdesk.measure >/dev/null 2>&1 &
 PID=$!
 trap 'kill $PID 2>/dev/null || true' EXIT
 printf '%-6s %-6s %-9s %s\n' "t(s)" "cpu%" "rss(MB)" "cputime"

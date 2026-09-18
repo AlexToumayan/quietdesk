@@ -204,6 +204,11 @@ final class Settings {
     }
     /// Clicking the desktop brings Finder forward (menu bar shows Finder, like the native desktop)
     /// while QuietDesk's panel keeps keyboard focus. Off: QuietDesk itself becomes the active app.
+    /// A plain click on the wallpaper reveals the desktop (when macOS's own setting allows it).
+    var revealDesktopOnWallpaperClick: Bool {
+        get { defaults.object(forKey: "revealDesktopOnWallpaperClick") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "revealDesktopOnWallpaperClick") }
+    }
     var activateFinderOnDesktopClick: Bool {
         get { defaults.object(forKey: "activateFinderOnDesktopClick") as? Bool ?? true }
         set { defaults.set(newValue, forKey: "activateFinderOnDesktopClick") }

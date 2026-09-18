@@ -15,6 +15,8 @@ protocol DesktopSurfaceDelegate: AnyObject {
     func surface(toggleStack stack: StackGroup)
     /// Finder collapses expanded Stacks when you click anywhere else.
     func surfaceCollapseStacks()
+    /// A plain click on the wallpaper (no drag, no modifiers): macOS may reveal the desktop.
+    func surfaceWallpaperClicked()
     /// Manual layouts: the user dropped items at new icon centres (flipped, screen-local).
     func surface(reposition centres: [URL: NSPoint], on screen: NSScreen)
     /// Submenus appended to the empty-desktop context menu (Sort By, Stacks, Labels).
@@ -74,6 +76,8 @@ final class DesktopView: NSView, NSDraggingSource, NSTextFieldDelegate, QLPrevie
     var mouseDownPoint = NSPoint.zero
     var didDrag = false
     var bandStart: NSPoint?
+    var bandMoved = false
+    var plainDown = false      // decided at mouse-down (see ShieldView)
     var truncationCache: [String: NSAttributedString] = [:]
     var eligibility: [String: Bool] = [:]
     var axElements: [NSAccessibilityElement] = []

@@ -33,10 +33,12 @@ final class ViewOptionsWindowController: NSWindowController {
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = true
         panel.isReleasedWhenClosed = false
-        super.init(window: panel)
-        build()
+        super.init(window: panel)   // the controls are laid out on first use, not at launch
     }
     required init?(coder: NSCoder) { fatalError("not used") }
+
+    private var isBuilt = false
+    private func buildIfNeeded() { if !isBuilt { isBuilt = true; build() } }
 
     func show() {
         refresh()
@@ -173,6 +175,7 @@ final class ViewOptionsWindowController: NSWindowController {
     private var current: ViewOptions { settings.effectiveViewOptions(finder: FinderDesktopPrefs.load()) }
 
     func refresh() {
+        buildIfNeeded()
         let o = current
         let prefs = FinderDesktopPrefs.load()
         let effectiveStacks = settings.stacksMode == .finder ? (StacksMode.allCases.first { $0.groupBy == prefs.groupBy } ?? .off) : settings.stacksMode

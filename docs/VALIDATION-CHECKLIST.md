@@ -16,6 +16,15 @@ everything else is unverified until ticked.
 - [ ] iCloud glyphs: not-downloaded, uploading and current items show the expected symbols; they update when a download finishes.
 - [ ] Tag colour dots appear for tagged items; alias badge on aliases.
 
+## Reveal desktop
+- [ ] Click the wallpaper: every window slides aside (with System Settings › Desktop & Dock › "Click wallpaper to reveal desktop" set to Always); Finder's own icons with names are what you see, with no doubled icons; click the wallpaper or a window edge: the windows return and QuietDesk's quiet desktop is back within about a quarter of a second. (Automated once: `--scenario-test --with-reveal`.)
+- [ ] F11 (or fn-F11), the spread gesture and a Desktop hot corner behave the same; doubled icons, if any, last up to about a second and a half (the check runs once a second with half a second of tolerance).
+- [ ] With Stage Manager off and the setting on "Only in Stage Manager", a wallpaper click only deselects; the same with QuietDesk's own menu switch (Click Wallpaper to Reveal Desktop) off.
+- [ ] With another app in front (say Safari), one click on the wallpaper both brings Finder forward and reveals the desktop, and the windows stay aside until the next click.
+- [ ] Start renaming an item, type a name that already exists, press F11: the rename ends quietly (no alert in the middle of the reveal).
+- [ ] Dragging a rubber band on the wallpaper, right-clicking it, or Command-clicking it never reveals the desktop.
+- [ ] Mission Control and Launchpad: QuietDesk's icons are hidden for their duration and return afterwards.
+
 ## Selection and keyboard
 - [ ] Single click selects; Cmd-click toggles; Shift-click extends; click on wallpaper deselects.
 - [ ] Rubber-band selection from wallpaper and from between icons.
@@ -68,7 +77,7 @@ everything else is unverified until ticked.
 - [ ] Mounting/unmounting a disk image or USB drive adds/removes its icon.
 
 ## macOS integration
-- [ ] Show Desktop (F11 / trackpad spread): app windows slide away, overlay stays; clicking icons works.
+- [ ] Show Desktop (F11 / trackpad spread): see "Reveal desktop" above (QuietDesk steps aside; Finder's own items show).
 - [ ] Mission Control: overlay is not shown as a window; returns intact.
 - [ ] Switching Spaces: overlay present on every Space; nothing duplicated.
 - [ ] A full-screen app: overlay is not visible over it; visible again on exit.

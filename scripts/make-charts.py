@@ -40,8 +40,8 @@ def write(name, content):
 def glance():
     W, H = 960, 250
     tiles = [
-        ("+0.00 s", "CPU time added, 40 s idle", "release build, no interaction"),
-        ("75 MB", "resident memory, stable", "±0.4 MB across the run"),
+        ("+0.05 s", "CPU time added, 50 s idle", "one 1 ms window check per second"),
+        ("84 MB", "resident memory, stable", "±0.2 MB across the run"),
         ("563 / 563", "automated checks passing", "17 XCTest + 43 self-test + 503 scenario"),
         ("29 fixed", "verified review defects", "two adversarial reviews, duplicates merged"),
     ]
@@ -53,21 +53,21 @@ def glance():
         b.append(text(x + 16, 110, big, 40, INK, weight="600", extra='font-variant-numeric="tabular-nums"'))
         b.append(text(x + 16, 140, label, 14, INK))
         b.append(text(x + 16, 162, sub, 12, INK2))
-    # sparkline of RSS (MB) over the 40 s run inside tile 2
-    rss = [75.2, 74.9, 74.8, 74.8, 74.8]
+    # sparkline of RSS (MB) over the 60 s run inside tile 2
+    rss = [84.2, 84.6, 84.4, 84.3, 84.3, 84.3, 84.3, 84.3, 84.3, 84.3, 84.3]
     x0 = 20 + (tw + 16) + 16; y0 = 190; wpx = tw - 32
-    pts = [(x0 + k * wpx / (len(rss) - 1), y0 - (v - 74.5) * 12) for k, v in enumerate(rss)]
+    pts = [(x0 + k * wpx / (len(rss) - 1), y0 - (v - 84.0) * 12) for k, v in enumerate(rss)]
     b.append('<polyline points="' + " ".join(f"{px:.1f},{py:.1f}" for px, py in pts) + f'" fill="none" stroke="{BLUE}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>')
-    b.append(text(20, 228, "Measured on macOS 26.6.2 (scripts/measure-idle.sh); details in docs/FEASIBILITY.md, E9 and E12.", 12, INK2))
+    b.append(text(20, 228, "Measured on macOS 26.6.2 (scripts/measure-idle.sh); details in docs/FEASIBILITY.md, E12 and E15.", 12, INK2))
     write("results-at-a-glance.svg", svg(W, H, "".join(b)))
 
 # 2. Idle measurement: two panels (CPU time, RSS) over time -----------------------------------
 def idle():
     W, H = 960, 300
-    t = [5, 15, 25, 35, 39]
-    cpu = [0.22, 0.22, 0.22, 0.22, 0.22]
-    rss = [75.2, 74.9, 74.8, 74.8, 74.8]
-    b = [text(20, 30, "Idle behaviour over a 40-second run (release build, desktop taken over, no interaction)", 15, INK, weight="600")]
+    t = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]
+    cpu = [0.25, 0.26, 0.27, 0.27, 0.28, 0.28, 0.28, 0.29, 0.29, 0.30, 0.30]
+    rss = [84.2, 84.6, 84.4, 84.3, 84.3, 84.3, 84.3, 84.3, 84.3, 84.3, 84.3]
+    b = [text(20, 30, "Idle behaviour over a 60-second run (release build, desktop taken over, no interaction)", 15, INK, weight="600")]
     def panel(x0, title, ys, ymin, ymax, unit, color, fmt):
         pw, ph, top, bottom = 420, 170, 70, 250
         b.append(text(x0, 58, title, 13, INK2))
@@ -75,17 +75,17 @@ def idle():
             gy = bottom - k * (bottom - top) / 3
             b.append(f'<line x1="{x0}" y1="{gy:.1f}" x2="{x0+pw}" y2="{gy:.1f}" stroke="{GRID}" stroke-width="1"/>')
             b.append(text(x0 - 6, gy + 4, fmt(ymin + k * (ymax - ymin) / 3), 11, INK2, anchor="end"))
-        pts = [(x0 + (tt - 0) * pw / 40, bottom - (v - ymin) * (bottom - top) / (ymax - ymin)) for tt, v in zip(t, ys)]
+        pts = [(x0 + (tt - 0) * pw / 60, bottom - (v - ymin) * (bottom - top) / (ymax - ymin)) for tt, v in zip(t, ys)]
         b.append('<polyline points="' + " ".join(f"{px:.1f},{py:.1f}" for px, py in pts) + f'" fill="none" stroke="{color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>')
         for px, py in pts:
             b.append(f'<circle cx="{px:.1f}" cy="{py:.1f}" r="6" fill="{SURFACE}"/><circle cx="{px:.1f}" cy="{py:.1f}" r="4" fill="{color}"/>')
-        for tt in (0, 10, 20, 30, 40):
-            b.append(text(x0 + tt * pw / 40, bottom + 18, f"{tt}s", 11, INK2, anchor="middle"))
+        for tt in (0, 10, 20, 30, 40, 50, 60):
+            b.append(text(x0 + tt * pw / 60, bottom + 18, f"{tt}s", 11, INK2, anchor="middle"))
         px, py = pts[-1]
         b.append(text(px - 8, py - 12, fmt(ys[-1]) + unit, 12, INK, anchor="end", weight="600"))
-    panel(70, "Cumulative CPU time (seconds): flat means the app did no work", cpu, 0, 1.0, " s", BLUE, lambda v: f"{v:.2f}")
-    panel(530, "Resident memory (MB)", rss, 60, 90, " MB", ORANGE, lambda v: f"{v:.0f}")
-    b.append(text(20, 285, "Samples from ps every 10 s. Source: docs/FEASIBILITY.md E12; reproduce with scripts/measure-idle.sh.", 12, INK2))
+    panel(70, "Cumulative CPU time (s): one 1 ms window check per second", cpu, 0, 1.0, " s", BLUE, lambda v: f"{v:.2f}")
+    panel(530, "Resident memory (MB)", rss, 60, 100, " MB", ORANGE, lambda v: f"{v:.0f}")
+    b.append(text(20, 285, "Samples from ps every 5 s. Source: docs/FEASIBILITY.md E15; reproduce with scripts/measure-idle.sh 60.", 12, INK2))
     write("idle-measurement.svg", svg(W, H, "".join(b)))
 
 # 3. Code review findings by lens ---------------------------------------------------------------

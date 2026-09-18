@@ -80,6 +80,7 @@ final class OverlayController: DesktopSurfaceDelegate {
 
     func show() {
         visible = true
+        guard !steppedAside else { return }      // the desktop is revealed: stay out of the way
         shields.forEach { $0.orderFrontRegardless() }
         windows.forEach { $0.orderFrontRegardless() }   // icon windows above their shields
         traceWindows("show")
@@ -90,7 +91,7 @@ final class OverlayController: DesktopSurfaceDelegate {
     func hide() {
         visible = false
         windows.forEach { $0.orderOut(nil) }
-        shields.forEach { $0.orderFrontRegardless() }
+        if !steppedAside { shields.forEach { $0.orderFrontRegardless() } }
         traceWindows("hide")
     }
 
@@ -113,6 +114,21 @@ final class OverlayController: DesktopSurfaceDelegate {
             guard let self, let w = note.object as? NSWindow, self.windows.contains(where: { $0 === w }) else { return }
             self.views.forEach { $0.clearHover() }
         })
+        scheduleRevealCheck(every: 1.0)
+        checkReveal()                               // enabled in the middle of a reveal: start out of the way
+        // No reveal can start while the displays sleep or the session is switched out: no checks then.
+        for name in [NSWorkspace.screensDidSleepNotification, NSWorkspace.sessionDidResignActiveNotification] {
+            workspaceObservers.append(wc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.revealTimer?.invalidate(); self?.revealTimer = nil
+            })
+        }
+        for name in [NSWorkspace.screensDidWakeNotification, NSWorkspace.sessionDidBecomeActiveNotification] {
+            workspaceObservers.append(wc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                guard let self, self.revealTimer == nil else { return }
+                self.scheduleRevealCheck(every: self.steppedAside ? 0.25 : 1.0)
+                self.checkReveal()
+            })
+        }
         let monitor = CloudStatusMonitor(directory: DesktopModel.desktopURL)
         monitor.onChange = { [weak self] in self?.cloudStatusChanged() }
         monitor.start()
@@ -120,6 +136,7 @@ final class OverlayController: DesktopSurfaceDelegate {
     }
 
     func stop() {
+        revealTimer?.invalidate(); revealTimer = nil
         hide()
         watcher = nil
         cloudMonitor?.stop(); cloudMonitor = nil
@@ -157,7 +174,7 @@ final class OverlayController: DesktopSurfaceDelegate {
         windows.forEach { $0.close() }
         shields.forEach { $0.close() }
         makeWindows()
-        if visible { show() } else { shields.forEach { $0.orderFrontRegardless() } }
+        if visible { show() } else if !steppedAside { shields.forEach { $0.orderFrontRegardless() } }
     }
 
     var listingFailed: Bool { model?.listingFailed ?? false }
@@ -343,6 +360,69 @@ final class OverlayController: DesktopSurfaceDelegate {
     var showsItemInfo: Bool { options.showItemInfo }
     var showsCloudStatus: Bool { options.showCloudStatus }
     var hoverRevealRadius: Int { options.hoverReveal }
+
+    // MARK: - Reveal desktop (Show Desktop): step aside while it lasts
+
+    private var revealTimer: Timer?
+    /// True while the desktop is revealed and QuietDesk's windows are out of the way.
+    private(set) var steppedAside = false
+    /// Off in tests that click the wallpaper but must not fling the person's windows about.
+    var revealOnWallpaperClick = true
+    private(set) var wallpaperClicks = 0
+
+    /// The system gives no event for a reveal starting or ending (FEASIBILITY E14), so the state
+    /// is read from the window list: once a second with generous tolerance at rest (about 1 ms
+    /// each), four times a second while revealed so the desktop comes back promptly.
+    private func scheduleRevealCheck(every interval: TimeInterval) {
+        revealTimer?.invalidate()
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in self?.checkReveal() }
+        timer.tolerance = interval / 2
+        RunLoop.main.add(timer, forMode: .common)
+        revealTimer = timer
+    }
+
+    func checkReveal() {
+        let revealed = DesktopReveal.isRevealed
+        guard revealed != steppedAside else { return }
+        steppedAside = revealed
+        DebugLog.log(revealed ? "desktop revealed: stepping aside" : "reveal ended: coming back")
+        if revealed {
+            // macOS is showing Finder's own items now; ours on top would be doubles. A rename in
+            // progress ends quietly first: no alert from inside a timer, and no second commit when
+            // ordering the key window out makes it resign key.
+            views.forEach { $0.finishRenameQuietly(); $0.clearHover() }
+            windows.forEach { $0.orderOut(nil) }
+            shields.forEach { $0.orderOut(nil) }
+            scheduleRevealCheck(every: 0.25)
+        } else {
+            if visible { show() } else { shields.forEach { $0.orderFrontRegardless() } }
+            scheduleRevealCheck(every: 1.0)
+        }
+    }
+
+    /// Set when a reveal we asked for never showed up in the window list: either the Dock ignored
+    /// the request or the detection no longer matches this macOS. Revealing without being able to
+    /// step aside would leave doubled icons, so wallpaper clicks stop asking for the session.
+    private var revealUnseen = false
+
+    func surfaceWallpaperClicked() {
+        wallpaperClicks += 1
+        guard revealOnWallpaperClick, settings.revealDesktopOnWallpaperClick, !revealUnseen, DesktopReveal.clickRevealsDesktop else { return }
+        let sent = DesktopReveal.toggle()
+        DebugLog.log("wallpaper click -> show desktop (\(sent ? "sent" : "entry point unavailable"))")
+        guard sent else { revealUnseen = true; return }
+        // The Dock needs a moment; look again shortly rather than waiting for the slow tick.
+        for delay in [0.15, 0.35, 0.7] { DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.checkReveal() } }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            guard let self, self.revealTimer != nil || self.steppedAside else { return }
+            self.checkReveal()
+            if !self.steppedAside {
+                self.revealUnseen = true
+                self.log.notice("a requested reveal was never observed; wallpaper clicks will only deselect until QuietDesk is turned off and on")
+                DebugLog.log("reveal requested but never observed: wallpaper-click reveal off for this session")
+            }
+        }
+    }
 
     func surfaceCollapseStacks() {
         guard !expandedStacks.isEmpty else { return }

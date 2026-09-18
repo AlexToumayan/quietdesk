@@ -57,6 +57,15 @@ extension DesktopView {
 
     func cancelRename() { if renameField != nil { endRename() } }
 
+    /// Ends a rename without ever putting up an alert: keeps the new name when it is usable and
+    /// drops it otherwise. For moments when the desktop is being taken away (a reveal).
+    func finishRenameQuietly() {
+        guard let field = renameField, let i = renamingIndex, i < cells.count, let url = cells[i].entry.url else { cancelRename(); return }
+        let newName = field.stringValue
+        if newName != url.lastPathComponent, !newName.isEmpty { try? fileOps.rename(url, to: newName) }
+        endRename()
+    }
+
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(NSResponder.insertNewline(_:)) { commitRename(); return true }
         if commandSelector == #selector(NSResponder.cancelOperation(_:)) { cancelRename(); return true }

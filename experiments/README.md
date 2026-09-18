@@ -27,6 +27,7 @@ placed above it), desktop sorted by Date Added with Stacks on, icon size 36, tex
 | [textsize.applescript](textsize.applescript) | E3 | Does Finder accept a label text size of 4 | Attempts a change; Finder rejects it |
 | [textsize10.applescript](textsize10.applescript) | E3 | Does Finder accept 10, and apply it live | Yes, 2 s at text size 10 |
 | [dsstore_iloc.py](dsstore_iloc.py) | E5 | Are the icon positions stored in `~/Desktop/.DS_Store` usable | No (parses a copy; refuses the live file) |
+| [reveal-trigger.swift](reveal-trigger.swift), [reveal-probe.swift](reveal-probe.swift), [reveal-events-probe.swift](reveal-events-probe.swift) | E14 | Can Show Desktop be started without a permission, are hidden items re-shown while the desktop is revealed, and does any event announce a reveal | Yes, windows slide aside for a few seconds |
 
 Experiments E7, E9, E10 and E12 (layout reproduction, resource use, the panel level trap) were measured
 with the app itself and its `--self-test` mode; they have no standalone script here.
@@ -284,6 +285,30 @@ The coordinates describe a left-to-right arrangement on a 110x126 pt pitch that 
 therefore both incomplete (58 of 148) and stale. The trailing-bytes row also refines the format note:
 DSStoreFormat.pod gives the padding as "6 bytes 0xff and 2 bytes 0?" with a question mark, and this file
 shows the last two bytes are not always zero.
+
+## reveal-trigger.swift, reveal-probe.swift, reveal-events-probe.swift
+
+**Question (E14):** can an app start macOS's "reveal desktop" without a permission, does the
+system re-show Finder's hidden items while the desktop is revealed, and is there any event that
+says a reveal started or ended?
+
+**What they do:** `reveal-trigger.swift` asks the Dock to toggle Show Desktop through
+`CoreDockSendNotification("com.apple.showdesktop.awake")`, a private symbol looked up with
+`dlsym`. `reveal-probe.swift` listens to every distributed and workspace notification while it
+toggles a reveal on and off and prints the Dock, WindowManager and Finder windows at the desktop
+levels in each state. `reveal-events-probe.swift` puts a transparent panel at the desktop-icon
+level + 1 (like QuietDesk's shield), registers for its occlusion, expose, screen and move
+notifications and for seven candidate Darwin notifications, and toggles a reveal.
+
+**Run:** `swift experiments/reveal-probe.swift` (each script slides your windows aside for a few
+seconds and leaves the desktop as it was). To see finding 1, hide desktop items first
+(`hide-toggle.sh`) and look at the screen during the reveal.
+
+**Result:** the trigger works with no permission; the old `Mission Control 1` command line does
+nothing on macOS 26. Finder's hidden items are re-shown for the whole reveal, however it was
+started. No notification of any kind fires, and the panel sees no occlusion change; the only
+observable is one screen-sized Dock window per display at layer 18 while revealed (and
+WindowManager's click-catchers gone). One window-list check takes about 1 ms.
 
 ## Hypotheses these experiments rejected or corrected
 
