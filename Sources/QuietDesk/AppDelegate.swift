@@ -114,6 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         DebugLog.log("enable")
         let c = OverlayController(labelMode: settings.labelMode)
         c.menuExtrasProvider = { [weak self] in self?.contextMenuExtras() ?? [] }
+        c.forceFinderGrid = args.contains("--no-hide")
         c.prepare()                                       // replacement is ready before anything is hidden
         if c.listingFailed {
             // Without Desktop access there is nothing to draw; never hide the native icons then.
@@ -364,6 +365,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let raw = sender.representedObject as? String, let mode = LabelMode(rawValue: raw) else { return }
         settings.labelMode = mode
         controller?.labelMode = mode
+        if ViewOptionsWindowController.shared.window?.isVisible == true { ViewOptionsWindowController.shared.refresh() }
         rebuildMenu()
     }
 

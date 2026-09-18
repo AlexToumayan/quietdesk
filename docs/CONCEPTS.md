@@ -94,8 +94,17 @@ doing that without breaking what the desktop already did.
 Finder arranges a "Sort By" desktop in columns from the top-right corner downward, then leftward.
 QuietDesk recomputes that order from the same information (dates, names, kinds) and the same
 grid size, and the result matched the owner's real desktop icon for icon, including the date
-Stacks. The cell size was measured from a screenshot for the owner's settings (icon 36, text 12,
-spacing 26); other settings may be a few points off, which is documented.
+Stacks. The cell size was measured from screenshots at three settings (icon 36 at two spacings,
+icon 32 at the tightest); the third point turned up a 2-point error at icon 32 that the owner had
+noticed by eye, which is a good reminder that "looks right" is a measurement too. Other settings
+may be a few points off, which is documented.
+
+**Why the grid can get denser.** Finder leaves two lines of room under every icon for its name.
+Once names only appear on hover, that room is empty most of the time, so QuietDesk's "compact
+grid" packs the icons as if there were no names at all and lets a name fade in over the row below
+when you point at its item. The icons never move while you hover: a name that pushed its
+neighbours away would also move the thing you were about to click, which is exactly the kind of
+bug the scenario test exists to catch.
 
 For desktops arranged by hand, Finder can be *asked* where each icon is, through its scripting
 interface. We found that on a sorted desktop those stored positions are stale leftovers from

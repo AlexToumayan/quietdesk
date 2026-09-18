@@ -35,7 +35,7 @@ final class DesktopView: NSView, NSDraggingSource, NSTextFieldDelegate, QLPrevie
     var cells: [LayoutCell] = [] {
         willSet { keptSelection = Set(selectedURLs) }   // read against the OLD cells
         didSet {
-            selection.removeAll(); hoverIndex = nil; revealed.removeAll(); focusIndex = nil
+            selection.removeAll(); hoverIndex = nil; settleHover(); revealed.removeAll(); focusIndex = nil
             setDropTarget(nil)                              // also stops a spring-loading timer
             pendingRenameClick?.cancel(); pendingRenameClick = nil
             bandStart = nil
@@ -58,6 +58,9 @@ final class DesktopView: NSView, NSDraggingSource, NSTextFieldDelegate, QLPrevie
     var committingRename = false
     var dragCarriesPromise = false
     var hoverIndex: Int?
+    /// 0...1 while the hovered name materialises (a 120 ms fade and 3 pt rise); 1 when settled.
+    var hoverProgress: CGFloat = 1
+    var hoverTimer: Timer?
     /// Neighbours of the hovered cell whose names are shown along with it (hover radius > 0).
     var revealed = Set<Int>()
     var selection = Set<Int>()
@@ -119,7 +122,8 @@ final class DesktopView: NSView, NSDraggingSource, NSTextFieldDelegate, QLPrevie
     override func updateTrackingAreas() {
         for area in trackingAreas { removeTrackingArea(area) }
         for (i, cell) in cells.enumerated() {
-            addTrackingArea(NSTrackingArea(rect: cell.iconRect.union(cell.labelRect),
+            // Compact grid: the whole (label-less) cell, so the areas never overlap each other.
+            addTrackingArea(NSTrackingArea(rect: metrics.compact ? cell.cellRect : cell.iconRect.union(cell.labelRect),
                                            options: [.mouseEnteredAndExited, .activeAlways],
                                            owner: self, userInfo: ["i": i]))
         }
@@ -136,8 +140,10 @@ final class DesktopView: NSView, NSDraggingSource, NSTextFieldDelegate, QLPrevie
         setHover(nil)
     }
 
-    /// Test hook used by the --render flag.
-    func simulateHover(_ i: Int) { setHover(i) }
+    /// Test hook used by the --render flag: hover with the fade-in already settled.
+    func simulateHover(_ i: Int) { setHover(i); settleHover() }
+
+    func settleHover() { hoverTimer?.invalidate(); hoverTimer = nil; hoverProgress = 1 }
 
     /// Clears a hover that macOS never ended (a window appeared on top without the pointer moving).
     func clearHover() { setHover(nil) }
@@ -145,22 +151,42 @@ final class DesktopView: NSView, NSDraggingSource, NSTextFieldDelegate, QLPrevie
     func setHover(_ i: Int?) {
         guard i != hoverIndex else { return }
         let oldReveal = revealed.union(hoverIndex.map { [$0] } ?? [])
+        // Only a name that was not on screen yet materialises; a visible one must not blink.
+        let materialises = i.map { !labelVisible($0) && labelMode != .hidden && $0 != renamingIndex } ?? false
         hoverIndex = i
         revealed = i.map { neighbours(of: $0) } ?? []
         for k in oldReveal.union(revealed).union(i.map { [$0] } ?? []) { invalidate(k) }
+        if materialises && revealed.isEmpty { animateHoverIn() } else { settleHover() }
+    }
+
+    /// The only timer hover ever uses: 120 ms after a hover starts it is gone again.
+    private func animateHoverIn() {
+        hoverTimer?.invalidate()
+        hoverProgress = 0
+        let start = CACurrentMediaTime()
+        let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] t in
+            guard let self else { t.invalidate(); return }
+            hoverProgress = min(1, CGFloat((CACurrentMediaTime() - start) / 0.12))
+            if let h = hoverIndex { invalidate(h) }
+            if hoverProgress >= 1 { t.invalidate(); hoverTimer = nil }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        hoverTimer = timer
     }
 
     /// Cells within the configured radius of `i` (Chebyshev distance on the grid), excluding `i`.
+    /// The compact grid has no room under the neighbours, so it reveals only the pointed-at item.
     func neighbours(of i: Int) -> Set<Int> {
         let r = delegate?.hoverRevealRadius ?? 0
-        guard r > 0, i < cells.count else { return [] }
+        guard r > 0, !metrics.compact, i < cells.count else { return [] }
         let c = cells[i]
         return Set(cells.indices.filter { $0 != i && abs(cells[$0].col - c.col) <= r && abs(cells[$0].row - c.row) <= r })
     }
 
     func invalidate(_ i: Int) {
         guard i < cells.count else { return }
-        setNeedsDisplay(cells[i].cellRect.union(expandedLabelRect(for: cells[i])))
+        let pill = expandedLabelRect(for: cells[i])
+        setNeedsDisplay(cells[i].cellRect.union(pill).union(pill.offsetBy(dx: 0, dy: 3)))   // incl. the hover rise
     }
 
     func invalidate(url: URL) {

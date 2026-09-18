@@ -22,6 +22,32 @@ final class LayoutTests: XCTestCase {
         let m = GridMetrics.from(prefs: prefs)
         XCTAssertEqual(Int(m.cellWidth), 84)
         XCTAssertEqual(Int(m.cellHeight), 82)
+        var tight = ViewOptions.from(finder: prefs); tight.gridSpacing = 1
+        let mt = GridMetrics.from(options: tight)
+        XCTAssertEqual(Int(mt.cellWidth), 50); XCTAssertEqual(Int(mt.cellHeight), 66)
+        var small = tight; small.iconSize = 32
+        let ms = GridMetrics.from(options: small)
+        XCTAssertEqual(Int(ms.cellWidth), 48); XCTAssertEqual(Int(ms.cellHeight), 60)
+    }
+
+    func testCompactGridDropsLabelRows() {
+        var o = ViewOptions.from(finder: prefs); o.gridSpacing = 1; o.iconSize = 32
+        let m = GridMetrics.from(options: o, compact: true)
+        XCTAssertEqual(Int(m.cellWidth), 48); XCTAssertEqual(Int(m.cellHeight), 45)
+        XCTAssertEqual(m.labelLines, 0)
+        let cell = Layout.makeCell(index: 0, entry: .stack(StackGroup(title: "T", items: [], order: 0)), col: 0, row: 0, origin: .zero, metrics: m)
+        XCTAssertEqual(cell.labelRect.height, 0)
+        XCTAssertEqual(cell.iconRect.midX, m.cellWidth / 2)
+    }
+
+    func testLabelBoxFitsItsCell() {
+        for (icon, spacing, lines) in [(CGFloat(32), CGFloat(1), 1), (36, 1, 2), (36, 26, 2)] {
+            var o = ViewOptions.from(finder: prefs); o.iconSize = icon; o.gridSpacing = spacing
+            let m = GridMetrics.from(options: o)
+            XCTAssertEqual(m.nameLines, lines, "icon \(icon) spacing \(spacing)")
+            let cell = Layout.makeCell(index: 0, entry: .stack(StackGroup(title: "T", items: [], order: 0)), col: 0, row: 0, origin: .zero, metrics: m)
+            XCTAssertLessThanOrEqual(cell.labelRect.maxY, m.cellHeight + 1, "icon \(icon) spacing \(spacing)")
+        }
     }
 
     func testSortedLayoutFillsTopRightThenDown() {

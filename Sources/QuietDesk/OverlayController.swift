@@ -32,8 +32,21 @@ final class OverlayController: DesktopSurfaceDelegate {
     var menuExtrasProvider: (() -> [NSMenuItem])?
 
     var labelMode: LabelMode {
-        didSet { views.forEach { $0.labelMode = labelMode } }
+        didSet {
+            views.forEach { $0.labelMode = labelMode }
+            applyViewOptions()   // the compact grid depends on whether names are always shown
+        }
     }
+
+    /// `--no-hide` is an alignment check against Finder's own icons, so it always uses Finder's grid.
+    var forceFinderGrid = false
+
+    /// The compact grid applies only while names are hidden, and never to manual layouts
+    /// (those positions are Finder's and live on Finder's grid).
+    private func currentMetrics() -> GridMetrics {
+        GridMetrics.from(options: options, compact: options.compactGrid && labelMode != .always && !forceFinderGrid && !(model?.isManual ?? false))
+    }
+    var usesCompactGrid: Bool { currentMetrics().compact }
 
     init(labelMode: LabelMode) {
         self.labelMode = labelMode
@@ -53,7 +66,7 @@ final class OverlayController: DesktopSurfaceDelegate {
         options = settings.effectiveViewOptions(finder: prefs)
         DebugLog.log("applyViewOptions icon=\(Int(options.iconSize)) spacing=\(Int(options.gridSpacing)) text=\(Int(options.textSize)) bottom=\(options.labelOnBottom) info=\(options.showItemInfo) previews=\(options.showIconPreview) cloud=\(options.showCloudStatus) hover=\(options.hoverReveal)")
         guard let model else { return }
-        let metrics = GridMetrics.from(options: options)
+        let metrics = currentMetrics()
         let layouts = layout(model, metrics: metrics)
         guard layouts.count == views.count else { rebuildWindows(); return }
         for ((window, view), layout) in zip(zip(windows, views), layouts) {
@@ -125,7 +138,7 @@ final class OverlayController: DesktopSurfaceDelegate {
     func reloadAndRelayout() {
         reloadModel()
         guard let model else { return }
-        let metrics = GridMetrics.from(options: options)
+        let metrics = currentMetrics()
         let layouts = layout(model, metrics: metrics)
         guard layouts.count == views.count else { rebuildWindows(); return }
         for ((window, view), layout) in zip(zip(windows, views), layouts) {
@@ -240,7 +253,7 @@ final class OverlayController: DesktopSurfaceDelegate {
         guard let model, localPositions.isEmpty else { return }
         var seeded: [URL: CGPoint] = [:]
         let sortedModel = DesktopModel.scan(prefs: prefs, settings: Settings.shared, expandedStacks: [], now: Date(), forceArrangeBy: prefs.arrangeBy)
-        let metrics = GridMetrics.from(options: options)
+        let metrics = GridMetrics.from(options: options)   // Finder's own grid: these become Finder-style positions
         for layout in Layout.compute(entries: sortedModel.entries, screens: NSScreen.screens, metrics: metrics) {
             for cell in layout.cells {
                 guard let url = cell.entry.url?.standardizedFileURL else { continue }
@@ -261,7 +274,7 @@ final class OverlayController: DesktopSurfaceDelegate {
 
     private func makeWindows() {
         guard let model else { return }
-        let metrics = GridMetrics.from(options: options)
+        let metrics = currentMetrics()
         let layouts = layout(model, metrics: metrics)
         windows = []; shields = []; views = []; shieldViews = []
         for layout in layouts {
@@ -313,7 +326,7 @@ final class OverlayController: DesktopSurfaceDelegate {
 
     private func relayoutOnly() {
         guard let model else { return }
-        let metrics = GridMetrics.from(options: options)
+        let metrics = currentMetrics()
         let layouts = layout(model, metrics: metrics)
         guard layouts.count == views.count else { rebuildWindows(); return }
         for ((window, view), layout) in zip(zip(windows, views), layouts) {
@@ -408,7 +421,7 @@ final class OverlayController: DesktopSurfaceDelegate {
         guard let model else { return "no model" }
         var out = "view options: icon=\(Int(options.iconSize)) text=\(Int(options.textSize)) spacing=\(Int(options.gridSpacing)) labelOnBottom=\(options.labelOnBottom) info=\(options.showItemInfo) previews=\(options.showIconPreview) (Finder: spacing=\(Int(prefs.gridSpacing))) arrangeBy=\(model.arrangeBy) groupBy=\(model.groupBy) stacks=\(model.stacksEnabled) manual=\(model.isManual)\n"
         out += "entries: \(model.entries.count) (items scanned: \(model.itemCount))\n"
-        let metrics = GridMetrics.from(options: options)
+        let metrics = currentMetrics()
         for (si, layout) in self.layout(model, metrics: metrics).enumerated() {
             let region = Layout.windowRegion(for: layout, metrics: metrics)
             out += "screen \(si) \(layout.screen.localizedName) \(Int(layout.screen.frame.width))x\(Int(layout.screen.frame.height)) grid \(layout.columns)x\(layout.rows) cell \(Int(metrics.cellWidth))x\(Int(metrics.cellHeight)) used \(layout.cells.count) window region \(Int(region.minX)),\(Int(region.minY)) \(Int(region.width))x\(Int(region.height))\n"

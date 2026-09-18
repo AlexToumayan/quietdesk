@@ -20,6 +20,7 @@ final class ViewOptionsWindowController: NSWindowController {
     private let itemInfo = NSButton(checkboxWithTitle: "Show item info", target: nil, action: nil)
     private let iconPreview = NSButton(checkboxWithTitle: "Show icon preview", target: nil, action: nil)
     private let cloudStatus = NSButton(checkboxWithTitle: "Show iCloud status", target: nil, action: nil)
+    private let compactGrid = NSButton(checkboxWithTitle: "Compact grid while names are hidden", target: nil, action: nil)
     private let hoverReveal = NSPopUpButton(frame: .zero, pullsDown: false)
     private let stackModes: [StacksMode] = [.off, .kind, .dateAdded, .dateModified, .dateCreated, .dateLastOpened, .tags]
     private let sortKeys: [SortKey] = [.none, .name, .kind, .dateAdded, .dateModified, .dateCreated, .dateLastOpened, .size, .tags]
@@ -62,7 +63,10 @@ final class ViewOptionsWindowController: NSWindowController {
         gridSpacing.isContinuous = true
         for (control, sel) in [(stackBy, #selector(changed)), (sortBy, #selector(changed)), (textSize, #selector(changed)), (hoverReveal, #selector(changed))] as [(NSControl, Selector)] { control.target = self; control.action = sel }
         for control in [iconSize, gridSpacing] { control.target = self; control.action = #selector(changed) }
-        for control in [labelBottom, labelRight, itemInfo, iconPreview, cloudStatus] { control.target = self; control.action = #selector(changed) }
+        for control in [labelBottom, labelRight, itemInfo, iconPreview, cloudStatus, compactGrid] { control.target = self; control.action = #selector(changed) }
+        compactGrid.toolTip = "With Item Labels set to On Hover or Hidden, pack the icons as if there were no names; a name appears over its neighbours when you point at its item. Off: keep Finder's grid, with room under every icon. Manually arranged desktops (Sort By: None) always keep Finder's grid."
+        hoverReveal.toolTip = "How far around the pointed-at item names are revealed. Needs room under the icons, so it is off while the compact grid is in use."
+        itemInfo.toolTip = "Item counts, sizes and free space under the names. Needs room under the icons, so it is off while the compact grid is in use."
         iconSizeLabel.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
 
         func row(_ title: String, _ view: NSView) -> [NSView] { [NSTextField(labelWithString: title), view] }
@@ -83,6 +87,7 @@ final class ViewOptionsWindowController: NSWindowController {
             [NSGridCell.emptyContentView, itemInfo],
             [NSGridCell.emptyContentView, iconPreview],
             [NSGridCell.emptyContentView, cloudStatus],
+            [NSGridCell.emptyContentView, compactGrid],
             row("Names on hover:", hoverReveal),
             [NSGridCell.emptyContentView, useFinder],
             [NSGridCell.emptyContentView, note],
@@ -125,7 +130,9 @@ final class ViewOptionsWindowController: NSWindowController {
         itemInfo.state = o.showItemInfo ? .on : .off
         iconPreview.state = o.showIconPreview ? .on : .off
         cloudStatus.state = o.showCloudStatus ? .on : .off
+        compactGrid.state = o.compactGrid ? .on : .off
         hoverReveal.selectItem(at: o.hoverReveal)
+        updateEnabledStates(o)
     }
 
     @objc private func changed(_ sender: Any?) {
@@ -138,13 +145,29 @@ final class ViewOptionsWindowController: NSWindowController {
         o.showIconPreview = iconPreview.state == .on
         o.showCloudStatus = cloudStatus.state == .on
         o.hoverReveal = max(0, hoverReveal.indexOfSelectedItem)
+        o.compactGrid = compactGrid.state == .on
         settings.viewOptions = o
         // Only the popup that was used changes Sort By / Stacks; any other control must leave
         // "follow Finder's setting" alone.
         if let s = sender as AnyObject?, s === stackBy { settings.stacksMode = stackModes[max(0, stackBy.indexOfSelectedItem)] }
         if let s = sender as AnyObject?, s === sortBy { settings.sortKey = sortKeys[max(0, sortBy.indexOfSelectedItem)] }
         iconSizeLabel.stringValue = "\(Int(o.iconSize)) × \(Int(o.iconSize))"
+        updateEnabledStates(o)
         onChange?()
+    }
+
+    /// Manual layouts keep Finder's grid, exactly as OverlayController.currentMetrics() decides.
+    private var manualLayout: Bool {
+        let arrange = settings.sortKey.arrangeBy ?? FinderDesktopPrefs.load().arrangeBy
+        return arrange == .none || arrange == .grid
+    }
+
+    /// Controls that have no effect in the current mode are disabled rather than silently ignored.
+    private func updateEnabledStates(_ o: ViewOptions) {
+        let namesHidden = settings.labelMode != .always
+        let compactApplies = o.compactGrid && namesHidden && !manualLayout
+        compactGrid.isEnabled = namesHidden && !manualLayout
+        for control in [hoverReveal, itemInfo, labelBottom, labelRight] as [NSControl] { control.isEnabled = !compactApplies }
     }
 
     @objc private func useFinderSettings() {

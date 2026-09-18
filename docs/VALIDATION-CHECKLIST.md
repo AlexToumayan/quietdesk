@@ -5,7 +5,7 @@ Tick each line with the result and the macOS version. Items marked (P) were exer
 everything else is unverified until ticked.
 
 ## Alignment and rendering
-- [ ] `.build/release/QuietDesk --no-hide --test-seconds 30`: overlay icons coincide with Finder's icons (no visible doubling). (P: order and cell centres matched a screenshot.)
+- [ ] `.build/release/QuietDesk --no-hide --test-seconds 30` (this flag always uses Finder's grid, not the compact one): overlay icons coincide with Finder's icons (no visible doubling). (P: order and cell centres matched a screenshot.)
 - [ ] Enable: native icons disappear and QuietDesk's appear with no gap in which neither is visible.
 - [ ] Labels: On Hover shows the full name promptly; moving away hides it; no flicker; long names wrap and stay on screen at the right and bottom edges.
 - [ ] Always Visible matches Finder's two-line, middle-truncated labels closely.
@@ -49,6 +49,8 @@ everything else is unverified until ticked.
 - [ ] After each View Options change (iCloud status, names on hover, icon size, spacing, text size, label position, item info, previews, Use Finder's Settings): a single click still expands a Stack and a double-click still opens a folder. (Automated: `--scenario-test`, ALL PASSED on 2026-09-17.)
 - [ ] With a Stack open, double-click a folder elsewhere: the Stack collapses and that folder opens, not whatever moved under the pointer. (Automated in `--scenario-test`.)
 - [ ] Changing an unrelated View Option (e.g. iCloud status) keeps Sort By / Stacks on "Finder's Setting" if that is what they were.
+- [ ] Compact grid on (default): icons pack with no label rows; pointing at an item fades its name in over the row below; clicking, double-clicking, renaming (Return) and rubber-band selection still work on the dense grid; unchecking it returns to Finder's grid with room under every icon.
+- [ ] With QuietDesk off, Finder's grid at icon 32 / tightest spacing has 48 pt columns and 60 pt rows; turning QuietDesk on with Compact grid off keeps every icon exactly where it was.
 
 ## Stacks and sorting
 - [ ] Single click on a stack expands it in place (items appear after it, others shift); click again collapses.

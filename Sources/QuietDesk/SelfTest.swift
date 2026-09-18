@@ -17,6 +17,21 @@ enum SelfTest {
         var tight = ViewOptions.from(finder: prefs); tight.gridSpacing = 1
         let mt = GridMetrics.from(options: tight)
         check("tightest grid spacing gives 50 x 66 cells (second calibration point)", Int(mt.cellWidth) == 50 && Int(mt.cellHeight) == 66)
+        var small = tight; small.iconSize = 32
+        let ms = GridMetrics.from(options: small)
+        check("icon 32 at the tightest spacing gives 48 x 60 cells (third calibration point)", Int(ms.cellWidth) == 48 && Int(ms.cellHeight) == 60)
+        let mc = GridMetrics.from(options: small, compact: true)
+        check("compact grid keeps the width and drops the label rows (48 x 45, no label lines)", Int(mc.cellWidth) == 48 && Int(mc.cellHeight) == 45 && mc.labelLines == 0)
+        let compactCell = Layout.makeCell(index: 0, entry: .stack(StackGroup(title: "T", items: [], order: 0)), col: 0, row: 0, origin: .zero, metrics: mc)
+        check("compact cells reserve no label area", compactCell.labelRect.height == 0 && compactCell.iconRect.midX == mc.cellWidth / 2)
+        check("one name line at the tightest spacing, two at spacing 26 (as Finder shows)", ms.nameLines == 1 && m.nameLines == 2)
+        for (name, mm) in [("icon 32 / spacing 1", ms), ("icon 36 / spacing 26", m), ("icon 36 / spacing 1", mt)] {
+            let c = Layout.makeCell(index: 0, entry: .stack(StackGroup(title: "T", items: [], order: 0)), col: 0, row: 0, origin: .zero, metrics: mm)
+            check("label box stays inside its cell (\(name))", c.labelRect.maxY <= mm.cellHeight + 1)
+        }
+        var info = small; info.showItemInfo = true
+        let mi = GridMetrics.from(options: info)
+        check("item info at the tightest spacing: one name line plus the info line", mi.infoLines == 1 && mi.nameLines == 1 && mi.labelLines == 2)
         var right = ViewOptions.from(finder: prefs); right.labelOnBottom = false
         let mr = GridMetrics.from(options: right)
         check("label-right cells are wider than tall", mr.cellWidth > mr.cellHeight)

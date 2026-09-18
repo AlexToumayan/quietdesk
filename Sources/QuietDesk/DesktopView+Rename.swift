@@ -7,7 +7,10 @@ extension DesktopView {
         guard i < cells.count, let item = cells[i].entry.item, !item.isVolume, renameField == nil else { return }
         if !(window?.isKeyWindow ?? false) { window?.makeKey() }
         let cell = cells[i]
-        let field = RenameField(frame: NSRect(x: cell.cellRect.minX - 6, y: cell.labelRect.minY - 2, width: cell.cellRect.width + 12, height: metrics.labelLineHeight * 2 + 8))
+        // Wide enough to edit in even on the compact grid, centred on the cell, kept on screen.
+        let width = max(cell.cellRect.width + 12, 120)
+        let x = max(0, min(cell.cellRect.midX - width / 2, bounds.width - width))
+        let field = RenameField(frame: NSRect(x: x, y: cell.labelRect.minY - 2, width: width, height: metrics.labelLineHeight * 2 + 8))
         field.font = NSFont.systemFont(ofSize: metrics.textSize)
         field.alignment = .center
         field.isBezeled = true; field.bezelStyle = .squareBezel

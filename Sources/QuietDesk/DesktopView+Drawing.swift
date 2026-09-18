@@ -5,16 +5,20 @@ extension DesktopView {
 
     /// Cheap bound that contains a cell and any expanded label it could show.
     func reach(of cell: LayoutCell) -> NSRect {
-        cell.cellRect.insetBy(dx: -metrics.cellWidth * 0.75, dy: 0).union(NSRect(x: cell.cellRect.minX, y: cell.cellRect.minY, width: cell.cellRect.width, height: cell.cellRect.height + metrics.labelLineHeight * 5))
+        // A pill can be 2.4 cells wide and, at a screen edge, is shifted up to 1.4 cells sideways.
+        cell.cellRect.insetBy(dx: -(metrics.cellWidth * 1.4 + 4), dy: 0).union(NSRect(x: cell.cellRect.minX, y: cell.cellRect.minY, width: cell.cellRect.width, height: cell.cellRect.height + metrics.labelLineHeight * 6.5 + 8))
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        var pills: [Int] = []
         for (i, cell) in cells.enumerated() where reach(of: cell).intersects(dirtyRect) {
             drawIcon(cell, index: i)
-            if i != hoverIndex, i != renamingIndex, labelVisible(i) {
-                drawLabel(cell, style: selection.contains(i) ? .selected : (focusIndex == i ? .focused : .plain))
-            }
+            guard i != hoverIndex, i != renamingIndex, labelVisible(i) else { continue }
+            if selection.contains(i) || focusIndex == i { pills.append(i) } else { drawLabel(cell, style: .plain) }
         }
+        // Name pills go above every icon: on the compact grid they reach into the row below,
+        // whose icon would otherwise be painted over them.
+        for i in pills { drawLabel(cells[i], style: selection.contains(i) ? .selected : .focused) }
         // The hovered label is drawn last so it sits above its neighbours. When neighbours are
         // revealed too, the hovered name uses the same plain style so nothing overlaps.
         if let h = hoverIndex, h < cells.count, h != renamingIndex, labelMode != .hidden {
@@ -22,6 +26,13 @@ extension DesktopView {
             else if revealed.isEmpty { drawLabel(cells[h], style: .hovered) }
             else { drawLabel(cells[h], style: .plain) }
         }
+    }
+
+    /// Whether cell `i` currently shows its name as a pill (full name over the neighbours),
+    /// which is then the topmost thing under the pointer.
+    func pillShown(_ i: Int) -> Bool {
+        guard labelMode != .hidden, i != renamingIndex, i < cells.count else { return false }
+        return (i == hoverIndex && revealed.isEmpty) || selection.contains(i) || focusIndex == i
     }
 
     func labelVisible(_ i: Int) -> Bool {
@@ -130,6 +141,8 @@ extension DesktopView {
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = metrics.labelOnBottom ? .center : .left
         paragraph.lineBreakMode = .byWordWrapping
+        paragraph.minimumLineHeight = metrics.labelLineHeight   // the pitch the cell formula assumes
+        paragraph.maximumLineHeight = metrics.labelLineHeight
         let shadow = NSShadow()
         shadow.shadowColor = NSColor.black.withAlphaComponent(0.85)
         shadow.shadowBlurRadius = 2
@@ -164,19 +177,22 @@ extension DesktopView {
                 var attrs = labelAttributes()
                 attrs[.foregroundColor] = NSColor.white.withAlphaComponent(0.78)
                 attrs[.font] = NSFont.systemFont(ofSize: max(9, metrics.textSize - 1))
-                let r = NSRect(x: cell.labelRect.minX, y: cell.labelRect.minY + 2 * metrics.labelLineHeight, width: cell.labelRect.width, height: metrics.labelLineHeight + 2)
+                let r = NSRect(x: cell.labelRect.minX, y: cell.labelRect.minY + CGFloat(metrics.nameLines) * metrics.labelLineHeight, width: cell.labelRect.width, height: metrics.labelLineHeight + 2)
                 (info as NSString).draw(with: r, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], attributes: attrs)
             }
         case .hovered, .selected, .focused:
-            let box = expandedLabelRect(for: cell)
+            // A hovered name materialises: it fades in while rising 3 pt into place.
+            let p = style == .hovered ? hoverProgress : 1
+            let box = expandedLabelRect(for: cell).offsetBy(dx: 0, dy: 3 * (1 - p))
             switch style {
             case .selected: NSColor.controlAccentColor.setFill()
-            case .hovered: NSColor.black.withAlphaComponent(0.55).setFill()
+            case .hovered: NSColor.black.withAlphaComponent(0.55 * p).setFill()
             default: NSColor.black.withAlphaComponent(0.35).setFill()
             }
             NSBezierPath(roundedRect: box, xRadius: 4, yRadius: 4).fill()
             var attrs = labelAttributes()
             attrs[.shadow] = nil
+            attrs[.foregroundColor] = NSColor.white.withAlphaComponent(p)
             (name as NSString).draw(with: box.insetBy(dx: 6, dy: 2), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], attributes: attrs)
         }
     }
@@ -190,12 +206,14 @@ extension DesktopView {
         }
     }
 
-    /// Two-line, middle-truncated label like Finder's. Results are cached per name and width.
+    /// Middle-truncated label like Finder's: two lines when the cell has room, one at the tightest
+    /// spacings. Results are cached per name, width and line count.
     func truncatedLabel(_ name: String, width: CGFloat) -> NSAttributedString {
-        let key = "\(Int(width))|\(name)"
+        let lines = max(1, metrics.nameLines)
+        let key = "\(Int(width))|\(lines)|\(name)"
         if let cached = truncationCache[key] { return cached }
         let attrs = labelAttributes()
-        let maxHeight = 2 * metrics.labelLineHeight + 1
+        let maxHeight = CGFloat(lines) * metrics.labelLineHeight + 1
         func fits(_ s: String) -> Bool {
             (s as NSString).boundingRect(with: NSSize(width: width, height: 1000), options: [.usesLineFragmentOrigin], attributes: attrs).height <= maxHeight
         }

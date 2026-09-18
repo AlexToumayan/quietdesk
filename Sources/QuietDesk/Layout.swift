@@ -1,9 +1,9 @@
 import AppKit
 
 /// Grid geometry. Finder's exact formula is internal; this one is CALIBRATED against Finder on
-/// macOS 26.6 at icon size 36 / text size 12 on two grid-spacing settings: spacing 26 gives
-/// 84 x 82 pt cells, spacing 1 (the slider's minimum) gives 50 x 66 pt. Between and beyond those
-/// points the mapping is assumed linear in the spacing value and additive in icon size.
+/// macOS 26.6 at text size 12: icon 36 / spacing 26 gives 84 x 82 pt cells, icon 36 / spacing 1
+/// (the slider's minimum) gives 50 x 66, icon 32 / spacing 1 gives 48 x 60. Between and beyond
+/// those points the mapping is assumed linear in the spacing value; other icon sizes extrapolate.
 struct GridMetrics {
     let iconSize: CGFloat
     let textSize: CGFloat
@@ -14,26 +14,49 @@ struct GridMetrics {
     let labelLineHeight: CGFloat
     let labelOnBottom: Bool
     let infoLines: Int          // 1 when "Show item info" adds a line under the name
+    /// No room reserved for names: the grid is as dense as the icons allow, and a name appears
+    /// over its neighbours only while its item is pointed at, selected or focused.
+    let compact: Bool
+    /// Name lines that fit under the icon: 2 normally, 1 at the tightest spacings (Finder shows
+    /// one line there too), 0 on the compact grid.
+    let nameLines: Int
 
-    var labelLines: Int { 2 + infoLines }
+    var labelLines: Int { compact ? 0 : nameLines + infoLines }
 
-    static func from(options o: ViewOptions) -> GridMetrics {
+    static func from(options o: ViewOptions, compact: Bool = false) -> GridMetrics {
         let font = NSFont.systemFont(ofSize: o.textSize)
-        let lineHeight = ceil(font.ascender - font.descender + font.leading)
-        let info = o.showItemInfo ? 1 : 0
-        let labelBlock = CGFloat(2 + info) * lineHeight
+        let raw = font.ascender - font.descender + font.leading
+        // Finder's label pitch (14 pt at 12 pt text); the labels are drawn at exactly this pitch
+        // so the box in the cell formula and the box on screen are the same box.
+        let lineHeight = raw.rounded()
+        let infoOption = (!compact && o.showItemInfo) ? 1 : 0
+        // Finder's cell holds the label lines (plus one for item info) and 2 pt around icons of
+        // 36 pt and up: 32 -> 60 and 36 -> 66 at the tightest spacing, 36 / 26 -> 82.
+        let labelBlock = compact ? 0 : CGFloat(2 + infoOption) * lineHeight + (o.iconSize >= 36 ? 2 : 0)
+        let vGap = 0.64 * (o.gridSpacing - 1)
         let cw: CGFloat, ch: CGFloat
-        if o.labelOnBottom {
-            cw = (o.iconSize + 13 + 1.36 * o.gridSpacing).rounded()
-            ch = (o.iconSize + labelBlock + 0.64 * (o.gridSpacing - 1)).rounded()
+        if o.labelOnBottom || compact {
+            // Finder never lets a cell get narrower than a short name needs (48 pt at 12 pt text).
+            cw = max(o.iconSize + 13 + 1.36 * o.gridSpacing, 4 * o.textSize + 1.36 * (o.gridSpacing - 1)).rounded()
+            ch = (o.iconSize + (compact ? 13 : labelBlock) + vGap).rounded()
         } else {
             // Label beside the icon: a wide, short cell.
             let textWidth = (max(96, o.textSize * 9) + 1.36 * o.gridSpacing).rounded()
             cw = o.iconSize + 6 + textWidth
-            ch = (max(o.iconSize, labelBlock) + 6 + 0.64 * (o.gridSpacing - 1)).rounded()
+            ch = (max(o.iconSize, labelBlock) + 6 + vGap).rounded()
+        }
+        // What actually fits under the icon: at the tightest spacing only one name line does.
+        var nameLines = 0, info = 0
+        if !compact && o.labelOnBottom {
+            let avail = max(1, Int(floor((ch - o.iconSize - 2) / lineHeight)))
+            info = (infoOption == 1 && avail >= 2) ? 1 : 0
+            nameLines = min(2, avail - info)
+        } else if !compact {
+            nameLines = 2; info = infoOption
         }
         return GridMetrics(iconSize: o.iconSize, textSize: o.textSize, cellWidth: cw, cellHeight: ch,
-                           topInset: 9, rightInset: 9, labelLineHeight: lineHeight, labelOnBottom: o.labelOnBottom, infoLines: info)
+                           topInset: 9, rightInset: 9, labelLineHeight: lineHeight,
+                           labelOnBottom: o.labelOnBottom || compact, infoLines: info, compact: compact, nameLines: nameLines)
     }
 
     static func from(prefs: FinderDesktopPrefs) -> GridMetrics { from(options: .from(finder: prefs)) }
@@ -93,10 +116,10 @@ enum Layout {
 
     static func makeCell(index: Int, entry: LayoutEntry, col: Int, row: Int, origin: NSPoint, metrics m: GridMetrics) -> LayoutCell {
         let cell = NSRect(x: origin.x, y: origin.y, width: m.cellWidth, height: m.cellHeight)
-        let labelHeight = CGFloat(m.labelLines) * m.labelLineHeight + 2
+        let labelHeight = m.labelLines == 0 ? 0 : CGFloat(m.labelLines) * m.labelLineHeight + 1
         if m.labelOnBottom {
             let icon = NSRect(x: (cell.midX - m.iconSize / 2).rounded(), y: origin.y, width: m.iconSize, height: m.iconSize)
-            let label = NSRect(x: origin.x + 5, y: icon.maxY + 3, width: m.cellWidth - 10, height: labelHeight)
+            let label = NSRect(x: origin.x + 5, y: icon.maxY + 2, width: m.cellWidth - 10, height: labelHeight)
             return LayoutCell(index: index, entry: entry, col: col, row: row, cellRect: cell, iconRect: icon, labelRect: label)
         }
         let icon = NSRect(x: origin.x + 3, y: (cell.midY - m.iconSize / 2).rounded(), width: m.iconSize, height: m.iconSize)
@@ -206,7 +229,8 @@ enum Layout {
         guard var region = layout.cells.first?.cellRect else { return NSRect(x: 0, y: 0, width: 2, height: 2) }
         for cell in layout.cells { region = region.union(cell.cellRect) }
         let marginX = ceil(m.cellWidth * 0.8)
-        let marginBottom = ceil(m.labelLineHeight * 5)
+        // Room for the tallest name pill (6 lines) below the last row, plus its 3 pt hover rise.
+        let marginBottom = ceil(max(m.labelLineHeight * 5, m.iconSize + 6 * m.labelLineHeight + 9 - m.cellHeight))
         region = NSRect(x: region.minX - marginX, y: region.minY, width: region.width + 2 * marginX, height: region.height + marginBottom)
         return region.intersection(NSRect(origin: .zero, size: layout.screen.frame.size)).integral
     }

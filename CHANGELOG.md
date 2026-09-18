@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Compact grid (View Options, on by default while names are On Hover or Hidden): no room is reserved
+  for names, so the desktop packs as densely as the icons allow, and a name materialises over its
+  neighbours when you point at its item (120 ms fade and rise). Off keeps Finder's grid, which is
+  what "Names on hover: neighbours" and "Show item info" need (both are off while the compact grid
+  is in use); manually arranged desktops always keep Finder's grid.
+- Grid calibration: a third measured point (icon 32, tightest spacing: 48 × 60) corrected cells that
+  were 2 pt too narrow and 2 pt too tall at that size; the two earlier points still match exactly.
+  Labels are drawn at Finder's line pitch and show one line where only one fits (the tightest
+  spacings), as Finder does, instead of running into the row below.
 - View Options: "Show iCloud status" switch (hide the cloud glyphs, useful on tight grids).
 - View Options: "Names on hover" (only the item / the item and its neighbours / a wider area).
 - Fixed: a hover label could stay on screen after a window opened on top of the desktop without

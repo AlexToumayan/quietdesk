@@ -170,6 +170,18 @@ final class ScenarioTest {
         }))
     }
 
+    /// The live view must actually be on the grid the round asked for.
+    private func expectGrid(compact: Bool) {
+        steps.append(("grid is \(compact ? "compact" : "Finder's")", { [self] in
+            guard let view else { return }
+            let o = Settings.shared.effectiveViewOptions(finder: controller.prefs)
+            let expected = GridMetrics.from(options: o, compact: compact)
+            expect(view.metrics.compact == compact, "metrics.compact should be \(compact)")
+            expect(view.metrics.cellHeight == expected.cellHeight, "cell height \(view.metrics.cellHeight) should be \(expected.cellHeight)")
+            expect(view.cells.allSatisfy { compact ? $0.labelRect.height == 0 : $0.labelRect.height > 0 }, "label boxes should be \(compact ? "empty" : "present")")
+        }))
+    }
+
     private func change(_ mutate: @escaping (inout ViewOptions) -> Void) -> () -> Void {
         { [self] in
             var o = Settings.shared.effectiveViewOptions(finder: controller.prefs)
@@ -198,6 +210,14 @@ final class ScenarioTest {
         addRound("text size 14", setup: change { $0.textSize = 14 })
         addRound("labels on the right", setup: change { $0.labelOnBottom = false })
         addRound("item info on, previews off", setup: change { $0.showItemInfo = true; $0.showIconPreview = false })
+        addRound("compact grid off (Finder's grid)", setup: change { $0.compactGrid = false })
+        expectGrid(compact: false)
+        addRound("compact grid on again", setup: change { $0.compactGrid = true })
+        expectGrid(compact: true)
+        addRound("names always visible") { [self] in s.labelMode = .always; controller.labelMode = .always }
+        expectGrid(compact: false)
+        addRound("names on hover again") { [self] in s.labelMode = .hover; controller.labelMode = .hover }
+        expectGrid(compact: true)
         addRound("Finder's icon size, spacing and text") { s.viewOptions = nil; vo.onChange?() }
         addRound("Stacks off", stacks: false) { s.stacksMode = .off; vo.onChange?() }
         addRound("Stacks by Kind") { s.stacksMode = .kind; vo.onChange?() }

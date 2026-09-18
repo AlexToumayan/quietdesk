@@ -4,7 +4,22 @@ import AppKit
 extension DesktopView {
 
     func cellIndex(at point: NSPoint) -> Int? {
-        cells.firstIndex { $0.iconRect.insetBy(dx: -4, dy: -4).contains(point) || $0.labelRect.contains(point) }
+        // A name shown as a pill lies on top of everything (it may cover the row below on the
+        // compact grid), so it is hit first: the hovered one, then selected and focused ones.
+        var candidates: [Int] = []
+        if let h = hoverIndex { candidates.append(h) }
+        candidates += selection.sorted()
+        if let f = focusIndex { candidates.append(f) }
+        for i in candidates where pillShown(i) && expandedLabelRect(for: cells[i]).contains(point) { return i }
+        // Icons win over the invisible label box of the item above, which can reach this far.
+        if let i = cells.firstIndex(where: { $0.iconRect.insetBy(dx: -4, dy: -4).contains(point) }) { return i }
+        return cells.firstIndex { $0.labelRect.contains(point) }
+    }
+
+    /// The name's on-screen box for the slow-second-click rename gesture: the label box, or the
+    /// pill when that is what is showing (always the case on the compact grid).
+    func nameRect(_ i: Int) -> NSRect {
+        pillShown(i) ? expandedLabelRect(for: cells[i]) : cells[i].labelRect
     }
 
     /// For the second click of a double-click: the cell of the item the first click landed on,
@@ -56,7 +71,7 @@ extension DesktopView {
             // A Stack toggles on the first click (mouse up); the second click of a double-click
             // must not open a Finder window on top of that.
             if !cells[i].entry.isStack { open([i]) }
-        } else if event.clickCount == 1, wasSoleSelection, !cmd, !shift, cells[i].labelRect.contains(p), cells[i].entry.url != nil {
+        } else if event.clickCount == 1, wasSoleSelection, !cmd, !shift, nameRect(i).contains(p), cells[i].entry.url != nil {
             // Finder: a second, slow click on a selected name starts renaming.
             let work = DispatchWorkItem { [weak self] in self?.beginRename(i) }
             pendingRenameClick = work

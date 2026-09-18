@@ -2,8 +2,9 @@
 
 [![CI](https://github.com/AlexToumayan/quietdesk/actions/workflows/ci.yml/badge.svg)](https://github.com/AlexToumayan/quietdesk/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/AlexToumayan/quietdesk)](https://github.com/AlexToumayan/quietdesk/releases) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A small, native macOS menu-bar utility that keeps your desktop icons where they are and shows their
-names only when you hover over them (or select them). No files are renamed, moved, hidden or changed.
+A small, native macOS menu-bar utility that keeps your desktop icons in place (Finder's grid, or a
+denser one if you prefer) and shows their names only when you hover over them (or select them). No
+files are renamed, moved, hidden or changed.
 
 **Status: v0.9.0, feature-complete, hands-on validation in progress.** The mechanism was proven and
 measured on macOS 26.6.2; the full set of desktop interactions is implemented and code-reviewed; the
@@ -45,10 +46,16 @@ Show View Options, Paste.
 
 **View Options** (⌘J on the desktop, or from either menu) is QuietDesk's version of Finder's panel:
 Stack By, Sort By, icon size, grid spacing, text size, label position (bottom or right), Show item
-info, Show icon preview, Show iCloud status. Changes apply immediately to QuietDesk's desktop and never modify Finder's
-own settings; "Use Finder's Settings" re-imports Finder's current values (that is also the default
-until you change something). The grid geometry is calibrated to Finder at two spacing settings on
-macOS 26.6 and is linear in between.
+info, Show icon preview, Show iCloud status, Compact grid, Names on hover. Changes apply immediately
+to QuietDesk's desktop and never modify Finder's own settings; "Use Finder's Settings" re-imports
+Finder's current values (that is also the default until you change something). The grid geometry is
+calibrated to Finder at three measured points on macOS 26.6 and interpolated in between.
+
+**Compact grid** (on by default while names are On Hover or Hidden): the icons are packed as if
+there were no names at all, so the desktop gets denser, and a name materialises over its neighbours
+only when you point at its item (a 120 ms fade). Turn it off to keep Finder's grid, with room under
+every icon; that is also what "Names on hover: neighbours" needs, and what manual (Sort By: None)
+desktops always use, since those positions are Finder's.
 
 "Desktop Items › Hidden" hides the overlay too (nothing on the desktop); the label choice is remembered.
 "Enabled" off stops all observers and windows and restores the native desktop.
@@ -61,7 +68,7 @@ Everything Finder's desktop does that people use, done by QuietDesk on its own l
 |---|---|
 | Layout | Finder's sorted grid (Sort By Name, Kind, Date Added/Modified/Created/Last Opened, Size, Tags) with Finder's order and cell geometry; manually arranged desktops read positions from Finder and write them back when you drag icons (Snap to Grid respected); volumes and disk images; continues onto other displays |
 | Stacks | Same grouping as Finder (by date buckets, kind, tags); single click expands a stack in place, click again collapses; stack piles show the newest items |
-| Labels | On hover, on selection, on keyboard focus, always, or hidden; full name on hover; two-line middle truncation like Finder; readable on light and dark wallpapers; screen-edge aware |
+| Labels | On hover, on selection, on keyboard focus, always, or hidden; full name on hover; two-line middle truncation like Finder; readable on light and dark wallpapers; screen-edge aware; compact grid with no room reserved for names while they are hidden |
 | Selection | Click, Cmd-click, Shift-click, rubber band (from the wallpaper or between icons), arrow keys, Cmd-A, Escape, type-to-select |
 | Opening | Double-click, Cmd-O, Cmd-Down, Open With ▸ (all registered apps, default first), spring-loaded folders while dragging |
 | Files | Rename (Return, or a slow second click on the name), Duplicate ⌘D, Make Alias ⌘L, Compress (Archive Utility), Copy ⌘C / Paste ⌘V / Move here ⌥⌘V, New Folder ⇧⌘N, Move to Trash ⌘⌫ (Put Back works), Eject ⌘E, Show Original ⌘R, Tags (Finder's seven colours plus your custom tags, colour dots on icons) |
@@ -133,7 +140,7 @@ Developer flags (run the bare executable, `.build/release/QuietDesk`):
 | `--dump-layout` | Prints the computed grid (screen, column, row, icon centre, kind, name) without showing anything. |
 | `--render out.png [--hover N] [--expand "Stack"] [-labelMode always\|hover\|hidden]` | Renders the main display's overlay to a PNG over a flat background. |
 | `--test-seconds N` | Quit automatically after N seconds (restores the desktop). |
-| `--no-hide` | Show the overlay without hiding Finder's items (alignment check: icons should coincide). |
+| `--no-hide` | Show the overlay without hiding Finder's items (alignment check: icons should coincide; always uses Finder's grid, never the compact one). |
 | `--hit-test` | Prints which window the window server would deliver clicks to at several points. |
 | `--scenario-test [--defaults-suite NAME] [--desktop-dir PATH]` | Replays click sequences through the real overlay windows across View Options states; see Tests. |
 | `--debug-log` | Appends an event trace (clicks, relayouts, window order, View Options changes) to `~/Library/Logs/QuietDesk/debug.log`. Also `defaults write dev.quietdesk.QuietDesk debugLog -bool YES`. |
@@ -151,10 +158,10 @@ thumbnails are requested only for files that are fully local.
 
 ## Known limitations
 
-- Grid geometry is calibrated against Finder at icon size 36 / text size 12 for two grid-spacing
-  settings (the tightest and a mid value) and interpolated elsewhere; other icon sizes may sit a
-  few points off Finder's cells (the order is always right, and QuietDesk's own View Options let you
-  adjust the spacing to taste).
+- Grid geometry is calibrated against Finder at text size 12 for icon 36 at two grid-spacing
+  settings (the tightest and a mid value) and for icon 32 at the tightest, and interpolated
+  elsewhere; other icon and text sizes may sit a few points off Finder's cells (the order is always
+  right, and QuietDesk's own View Options let you adjust the spacing to taste).
 - Manually arranged desktops (Sort By: None) were implemented from Finder's scripting dictionary and
   the module's calibration on this machine, but not yet validated on a desktop that actually uses
   manual positions.
@@ -207,7 +214,7 @@ QuietDesk stores only its menu choices and the restore record in that preference
 ![Idle measurement](docs/assets/idle-measurement.svg)
 
 Overlay enabled and idle for 40 s with the full feature set: CPU time constant at 0.22 s (0.0 % in
-every sample), resident memory about 75 MB, no timers, no polling, no disk activity. Work happens only on hover, clicks, keys,
+every sample), resident memory about 75 MB, no timers at rest (one 120 ms timer runs while a hovered name fades in), no polling, no disk activity. Work happens only on hover, clicks, keys,
 a change in the Desktop folder, a volume mount, a display change, an iCloud status change, or when a
 thumbnail is first needed. Details and caveats in the feasibility document.
 
