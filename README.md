@@ -2,15 +2,17 @@
 
 [![CI](https://github.com/AlexToumayan/quietdesk/actions/workflows/ci.yml/badge.svg)](https://github.com/AlexToumayan/quietdesk/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/AlexToumayan/quietdesk)](https://github.com/AlexToumayan/quietdesk/releases) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-A small, native macOS menu-bar utility that keeps your desktop icons in place (Finder's grid, or a
-denser one if you prefer) and shows their names only when you hover over them (or select them). No
-files are renamed, moved, hidden or changed.
+QuietDesk hides the names under your Mac's desktop icons and shows a name only when you point at that icon (or select it). It is a small, native app that lives in the menu bar. Your icons stay where Finder put them, or sit on a denser grid if you prefer. No file is renamed, moved, hidden or changed.
 
-**Status: v0.9.0, feature-complete, hands-on validation in progress.** The mechanism was proven and
+**Status: version 0.9.1, plus the newer changes listed under Unreleased in [CHANGELOG.md](CHANGELOG.md). Every feature is built. Testing by hand is in progress.** The mechanism was proven and
 measured on macOS 26.6.2; the full set of desktop interactions is implemented and code-reviewed; the
 manual checklist in [docs/VALIDATION-CHECKLIST.md](docs/VALIDATION-CHECKLIST.md) is being worked
 through. Read [docs/FEASIBILITY.md](docs/FEASIBILITY.md) for how it works and what it changes, and
 [docs/CASE-STUDY.md](docs/CASE-STUDY.md) for how it was built.
+
+**New here?** Start with [the ideas explained simply](docs/CONCEPTS.md). It takes about ten minutes and needs no programming.
+
+**Here to see how it was built?** Read [the case study](docs/CASE-STUDY.md) first. Then look at [the prompts as cards](docs/PROMPTS.md), [the experiments](experiments/README.md) and [the evidence pages](docs/evidence/). Every write-up is a Markdown page in this repository, so there is nothing to download.
 
 ## What it does
 
@@ -49,17 +51,12 @@ Show View Options, Paste.
 Stack By, Sort By, icon size, grid spacing, text size, label position (bottom or right), Show item
 info, Show icon preview, Show iCloud status, Compact grid, Names on hover. Changes apply immediately
 to QuietDesk's desktop and never modify Finder's own settings; "Use Finder's Settings" re-imports
-Finder's current values (that is also the default until you change something). The grid geometry is
-calibrated to Finder at three measured points on macOS 26.6 and interpolated in between.
+Finder's current values (that is also the default until you change something). Icon spacing was measured against Finder at three settings on macOS 26.6. Settings in between are estimated, so icons may sit a few points away from where Finder would put them. The order is always right.
 
-**Compact grid** (on by default while names are On Hover or Hidden): the icons are packed as if
-there were no names at all, so the desktop gets denser, and a name materialises over its neighbours
-only when you point at its item (a 120 ms fade). Turn it off to keep Finder's grid, with room under
-every icon; that is also what "Names on hover: neighbours" needs, and what manual (Sort By: None)
-desktops always use, since those positions are Finder's.
+**Compact grid** (on by default while names are On Hover or Hidden): the icons are packed as if there were no names at all, so more fits on the desktop. When you point at an item, its name fades in on top of the icons below it (the fade takes 120 ms). Turn it off to keep Finder's spacing, with room for a name under every icon. Finder's spacing is also what the wider "Names on hover" choices need, because they show the names around the pointer too. Desktops you arrange by hand (Sort By: None) always use it, since those positions are Finder's.
 
-"Desktop Items › Hidden" hides the overlay too (nothing on the desktop); the label choice is remembered.
-"Enabled" off stops all observers and windows and restores the native desktop.
+"Desktop Items › Hidden" hides QuietDesk's icons as well, so the desktop is completely empty. Your label choice is remembered.
+"Turn QuietDesk Off" removes QuietDesk's layer completely and puts Finder's own icons back.
 
 ## Desktop features
 
@@ -90,8 +87,7 @@ requested reveal never shows up, wallpaper clicks go back to only deselecting. T
 switch for it (Click Wallpaper to Reveal Desktop).
 
 Not offered: Finder's own menu-bar menus acting on QuietDesk's selection (they act on Finder's,
-which is empty while items are hidden), Finder's "Show View Options" panel (use QuietDesk's Sort By
-and Stacks menus instead), and desktop widgets overlap testing (untested).
+which is empty while items are hidden), Finder's own "Show View Options" panel (QuietDesk has its own panel, ⌘J, which never changes Finder's settings), and desktop widgets overlap testing (untested).
 
 ## How it was built
 
@@ -104,7 +100,7 @@ built, and the code adversarially reviewed before release. The whole trail is in
 - [docs/CASE-STUDY.md](docs/CASE-STUDY.md): the process, decisions and numbers.
 - [docs/PROMPTS.md](docs/PROMPTS.md): every agent prompt as a structured card; scripts in [docs/workflows/](docs/workflows/).
 - [docs/FEASIBILITY.md](docs/FEASIBILITY.md) and [experiments/](experiments/): what was tried and what happened.
-- [docs/evidence/](docs/evidence/): research digest, module reports, review findings and resolutions.
+- [docs/evidence/](docs/evidence/): research digest, module reports, the code review, and the two feature reviews, each with findings and how they were resolved.
 
 ## Requirements
 
@@ -126,7 +122,7 @@ built, and the code adversarially reviewed before release. The whole trail is in
   grids, manual layout, label modes, activation states), exit status 0 when all pass. CI runs it against a
   fixture folder (`--desktop-dir`). It uses a private preferences suite and never hides the native
   desktop.
-- `scripts/measure-idle.sh [seconds]` reproduces the idle measurement.
+- `scripts/measure-idle.sh 60` reproduces the idle measurement under Performance (without a number it runs for 40 s). It is the real thing: Finder's desktop icons are hidden for the run and put back when it ends, so leave the mouse alone. The first time, macOS may ask your terminal app for access to the Desktop folder. It prints CPU %, memory in MB and total CPU time every 5 s.
 
 ## Build and run
 
@@ -163,7 +159,7 @@ Developer flags (run the bare executable, `.build/release/QuietDesk`):
 | Files and Folders › Desktop Folder | To list the items on your Desktop (metadata only). | First enable. |
 | Automation › Finder | Get Info (opens Finder's Info window), New Finder Window (⌘N), and reading/writing icon positions on manually arranged desktops. One Apple event per action; nothing at idle. | First time one of those is used. Denying only disables those three things. |
 
-No Accessibility, Screen Recording, Full Disk Access, network, analytics, helpers or launch agents.
+No Accessibility, Screen Recording, Full Disk Access, network, analytics, helpers or launch agents. The once-a-second reveal check reads only which app owns each window, its level and its size. That needs no permission. Window titles, which would need Screen Recording, are never read. Two things work without any prompt but are worth knowing. QuietDesk reads Finder's and WindowManager's settings and writes one WindowManager setting (the hide switch), so it is not sandboxed. And the wallpaper-click reveal calls one private Dock function, looked up at run time.
 The process opts out of downloading cloud-only files (Apple's dataless-file I/O policy), and
 thumbnails are requested only for files that are fully local.
 
@@ -173,9 +169,7 @@ thumbnails are requested only for files that are fully local.
   settings (the tightest and a mid value) and for icon 32 at the tightest, and interpolated
   elsewhere; other icon and text sizes may sit a few points off Finder's cells (the order is always
   right, and QuietDesk's own View Options let you adjust the spacing to taste).
-- Manually arranged desktops (Sort By: None) were implemented from Finder's scripting dictionary and
-  the module's calibration on this machine, but not yet validated on a desktop that actually uses
-  manual positions.
+- "Sort By › None" has two modes. If Finder itself is sorting the desktop, QuietDesk keeps its own positions. They start from the current grid, are stored in QuietDesk's preferences and are never written to Finder. The automated scenario test covers this mode. If Finder's desktop is arranged by hand, QuietDesk reads and writes Finder's positions through Finder scripting. That mode was built from Finder's scripting dictionary and has not yet been checked on a real hand-arranged desktop.
 - Finder's Info window and New Finder Window need the Finder Automation permission.
 - Approximations: "Date Last Opened" uses the file's last-access time (Finder uses Launch Services'
   last-used date); the "Screenshots" kind group is detected by the "Screenshot" name prefix; Stack
@@ -183,12 +177,10 @@ thumbnails are requested only for files that are fully local.
 - A change in the Desktop folder while a name is being edited cancels the edit.
 - Quick Look and Open on a cloud-only (evicted) file download it, exactly as in Finder; drawing
   its icon never does.
-- "Sort By › None (Finder Positions)" reads and writes Finder's positions only when Finder's own
-  desktop is manually arranged. If Finder is sorting the desktop, QuietDesk keeps its own manual
-  positions (seeded from the current grid, stored in its preferences) and never writes to Finder.
 - Because each rebuild changes the ad-hoc signature, macOS may ask for permissions again after
   rebuilding. Distributing a downloadable build to other people needs Developer ID signing and
   notarization (paid Apple Developer Program) or the "Open Anyway" flow on their side.
+- While the desktop is revealed you see Finder's own icons, with their names. A reveal started by F11, the spread gesture or a hot corner is noticed at the next once-a-second check, so doubled icons can show for up to about a second and a half. When the reveal ends, QuietDesk is back within about a quarter of a second.
 - Untested so far: Mission Control, Stage Manager, full-screen apps, sleep/wake,
   display connection changes, desktop widgets, and the "Bring Finder Forward" keyboard-focus
   behaviour. See the checklist.
@@ -229,9 +221,7 @@ launch, cumulative CPU time up by 0.05 s over 50 s (about a thousandth of one co
 84 MB and flat, no disk activity. The one piece of regular work at rest is a look at the window list
 once a second (about 1 ms, with half a second of timer tolerance, paused while the displays sleep):
 macOS sends no event when the desktop is revealed, and QuietDesk has to step aside when it is
-(FEASIBILITY E14). There is no other timer or polling: one 120 ms timer runs while a hovered name
-fades in, and everything else happens on hover, clicks, keys, a change in the Desktop folder, a
-volume mount, a display change, an iCloud status change, or when a thumbnail is first needed.
+(FEASIBILITY E14). Nothing else repeats while the desktop is at rest. Short-lived timers run only while you are doing something: a redraw loop for the 120 ms a hovered name takes to fade in, a one-second timer for spring-loaded folders during a drag, and another for type-to-select. The window-list check speeds up to four times a second while the desktop is revealed, so QuietDesk comes back promptly. Everything else happens on hover, clicks, keys, a change in the Desktop folder, a volume mount, a display change, an iCloud status change, or when a thumbnail is first needed.
 Details and caveats in the feasibility document.
 
 ## Project layout
@@ -242,7 +232,7 @@ Sources/QuietDesk/
   main.swift             bootstrap; dataless-file I/O policy
   AppDelegate.swift      menu bar, enable/disable, restore and crash recovery, diagnostics
   OverlayController.swift  windows per screen, model, stacks, positions, observers
-  OverlayWindow.swift    non-activating transparent panel at desktop-icon level + 1
+  OverlayWindow.swift    non-activating transparent panel just above the desktop-icon level (shield + 1, icons + 2)
   ShieldView.swift       bitmap-free full-screen click owner (rubber band, drops, menu)
   DesktopView.swift      the desktop surface: state, hover, selection
   DesktopView+*.swift    drawing, mouse, keyboard, menus, drag and drop, rename, Quick Look, accessibility

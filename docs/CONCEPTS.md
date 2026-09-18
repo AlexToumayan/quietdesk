@@ -32,14 +32,18 @@ Higher numbers are closer to you. macOS reserves a few numbers for special thing
 sheet is at the very bottom, the desktop-icons sheet is one step above it, and normal app
 windows are far above both.
 
-QuietDesk draws on a sheet **one step above the desktop-icons sheet**. That keeps it below every
+QuietDesk draws on sheets **just above the desktop-icons sheet**. That keeps it below every
 app window (it can never cover your work) and above Finder's icon window and, as it turned out,
 above an invisible window macOS adds when icons are hidden (see §4).
+
+![The stack of sheets, from your app windows on top down to the wallpaper](assets/window-layers.svg)
+
+*The same stack as a picture. Higher sheets are closer to you.*
 
 We found one trap here: the kind of window we use (a "panel") silently moves itself to the
 normal-app sheet if two settings are applied in the wrong order. For twelve seconds during a
 test, the overlay sat on top of every app. The fix was a one-line ordering change and a guard;
-the lesson is recorded as experiment E10.
+the lesson is recorded as experiment E10. (Codes like E10 are experiment numbers. The numbered list is in section 3 of [FEASIBILITY.md](FEASIBILITY.md).)
 
 ## 3. How a click finds its window
 
@@ -49,12 +53,7 @@ transparent pixel does not count, so the click falls through to whatever is unde
 that is even one step away from fully transparent (1 on a 0–255 scale) counts as solid. We
 measured this by stacking two windows of our own and asking macOS which one a click would hit.
 
-There is also a switch on each window that can override the rule in both directions: set one
-way, the window ignores clicks everywhere; set the other way explicitly, it catches clicks
-everywhere, transparent pixels included. Apple described this three-way behaviour in release
-notes in 2003 and it still holds on macOS 26. QuietDesk uses the "catch everywhere" setting on
-purpose (§4 explains why), and keeps a second, invisible full-screen window underneath as a
-safety net.
+Each window also has a switch with three positions. Left alone, the rule above applies. Set to "ignore", clicks pass through the window everywhere. Set to "catch", the window catches clicks everywhere, even on its transparent parts. Apple described this in release notes in 2003 and it still holds on macOS 26. QuietDesk uses the "catch" position on purpose (§4 explains why). It also keeps a second, invisible full-screen window underneath as a safety net, so a desktop click can never slip past QuietDesk to the click-catcher described in §4.
 
 ## 4. The "Show Items" switch and the invisible click-catcher
 
@@ -70,16 +69,11 @@ make Finder's icons reappear underneath QuietDesk's. So while QuietDesk is enabl
 click on the desktop, and provides the things a wallpaper click used to do (deselect, rubber-band
 select, the right-click menu, drops) itself.
 
-That left the "click the wallpaper to reveal the desktop" gesture, where every window slides
-aside. An experiment settled how to bring it back. Whenever the desktop is revealed, by a click,
-by F11 or by the trackpad gesture, macOS shows Finder's own icons again for as long as the reveal
-lasts, even though they are switched off. It does that for everyone who hides desktop items; a
-reveal means "show me everything". QuietDesk's icons on top of Finder's would be doubles, so
-QuietDesk steps aside while the desktop is revealed and returns the moment it ends. There is one
-catch: macOS tells nobody when a reveal starts or stops. We listened on every channel an app
-can listen on and heard nothing. The only trace is a window the Dock puts up for the duration,
-so QuietDesk glances at the list of windows once a second, which takes about a thousandth of a
-second, and that is the one piece of regular work it does at rest.
+That left the "click the wallpaper to reveal the desktop" gesture, where every window slides aside. An experiment showed how to bring it back: when you click empty wallpaper, QuietDesk asks the Dock to do its normal "show desktop" slide, as long as that gesture is switched on in System Settings.
+
+The same experiment turned up a surprise. Whenever the desktop is revealed, by a click, by F11 or by the trackpad gesture, macOS shows Finder's own icons again until the reveal ends, even though they are switched off. It does that for everyone who hides desktop items. QuietDesk's icons on top of Finder's would be doubles, so QuietDesk steps aside while the desktop is revealed and comes back when it ends.
+
+There is one catch: macOS tells nobody when a reveal starts or stops. We listened on every channel an app can listen on and heard nothing. The only trace is a window the Dock puts up while the desktop is revealed. So QuietDesk looks at the list of windows once a second. Each look takes about a thousandth of a second, and it is the one piece of regular work QuietDesk does at rest. If a reveal is started by F11 or the gesture, QuietDesk can take up to about a second and a half to notice, so you may see doubled icons for a moment.
 
 ## 5. Why the names could not simply be hidden
 
@@ -102,23 +96,18 @@ doing that without breaking what the desktop already did.
 ## 6. Knowing where every icon belongs
 
 Finder arranges a "Sort By" desktop in columns from the top-right corner downward, then leftward.
-QuietDesk recomputes that order from the same information (dates, names, kinds) and the same
-grid size, and the result matched the owner's real desktop icon for icon, including the date
-Stacks. The cell size was measured from screenshots at three settings (icon 36 at two spacings,
-icon 32 at the tightest); the third point turned up a 2-point error at icon 32 that the owner had
-noticed by eye, which is a good reminder that "looks right" is a measurement too. Other settings
-may be a few points off, which is documented.
+QuietDesk recomputes that order from the same information (dates, names, kinds) and the same grid size. The result matched a real, crowded desktop icon for icon, including the date Stacks. The spacing between icons was measured from screenshots of Finder at three combinations of icon size and spacing. The third measurement exposed an error of 2 points (under a millimetre) that had already been spotted by eye. That is a good reminder that "looks right" is a measurement too. Other settings may be a few points off, which is documented.
 
 **Why the grid can get denser.** Finder leaves two lines of room under every icon for its name.
 Once names only appear on hover, that room is empty most of the time, so QuietDesk's "compact
 grid" packs the icons as if there were no names at all and lets a name fade in over the row below
 when you point at its item. The icons never move while you hover: a name that pushed its
 neighbours away would also move the thing you were about to click, which is exactly the kind of
-bug the scenario test exists to catch.
+bug our automatic click-through test exists to catch (a program that clicks around a test desktop after every settings change).
 
 For desktops arranged by hand, Finder can be *asked* where each icon is, through its scripting
 interface. We found that on a sorted desktop those stored positions are stale leftovers from
-years ago (E2), which is why QuietDesk only uses them when Finder itself is in manual mode, and
+old layouts (experiment E2 in [FEASIBILITY.md](FEASIBILITY.md)), which is why QuietDesk only uses them when Finder itself is in manual mode, and
 keeps its own positions otherwise.
 
 ## 7. Permissions: the Mac asks before an app may look
@@ -179,9 +168,7 @@ only wakes up when macOS tells it something happened: the pointer entered an ico
 appeared on the Desktop, a disk was mounted, a display was plugged in, an iCloud status changed.
 Redraws touch only the icon that changed.
 
-We measured it the plain way: run the release build with the desktop taken over, do nothing for
-a minute, and sample the process. Every sample read 0.0 % CPU; over 50 seconds the process used
-five hundredths of a second in total, and it held about 84 MB of memory without growing. The script to repeat this is `scripts/measure-idle.sh`.
+We measured it the plain way: run the finished app with the desktop taken over, do nothing for a minute, and check its CPU use every five seconds. Every check read 0.0 % CPU. Over 50 seconds the app used five hundredths of a second of processor time in total, and it held about 84 MB of memory without growing. The script to repeat this is `scripts/measure-idle.sh 60`.
 
 ## 12. Undo, and why file operations are careful
 

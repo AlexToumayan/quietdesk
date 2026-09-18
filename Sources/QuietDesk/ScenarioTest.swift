@@ -251,6 +251,34 @@ final class ScenarioTest {
         addRound("Bring Finder Forward off") { s.activateFinderOnDesktopClick = false }
         addRound("Bring Finder Forward on again") { s.activateFinderOnDesktopClick = true }
         addRound("reload desktop") { [self] in controller.reloadAndRelayout() }
+        // A simulated reveal through the test seam: the whole step-aside state machine, no real reveal.
+        steps.append(("simulated reveal: step aside", { [self] in
+            round = "simulated reveal"
+            controller.revealProbe = { true }
+            controller.checkReveal()
+            expect(controller.steppedAside, "QuietDesk should step aside when the desktop is revealed")
+            expect(controller.windows.allSatisfy { !$0.isVisible } && controller.shields.allSatisfy { !$0.isVisible }, "no QuietDesk window should be on screen during a reveal")
+            controller.reloadAndRelayout(); controller.applyViewOptions(); controller.show()
+            expect(controller.windows.allSatisfy { !$0.isVisible } && controller.shields.allSatisfy { !$0.isVisible }, "a relayout, a view-option change or show() during a reveal must not bring the windows back")
+        }))
+        steps.append(("simulated reveal: come back", { [self] in
+            controller.revealProbe = { false }
+            controller.checkReveal()
+            expect(!controller.steppedAside, "QuietDesk should come back when the reveal ends")
+            expect(controller.windows.contains { $0.isVisible } && controller.shields.allSatisfy { $0.isVisible }, "QuietDesk's windows should be back on screen")
+            controller.revealProbe = { DesktopReveal.isRevealed }
+        }))
+        steps.append(("a click in a gap between icons is a wallpaper click", { [self] in
+            guard let view, let w = view.window, let cell = view.cells.first(where: { !$0.entry.isStack }) else { return }
+            // The cell's bottom-left corner: inside the icon window, outside every icon and name.
+            let p = NSPoint(x: cell.cellRect.minX + 1, y: cell.cellRect.maxY - 1)
+            guard view.cellIndex(at: p) == nil else { print("skip: no gap at the probe point on this grid"); return }
+            let before = controller.wallpaperClicks
+            let wp = view.convert(p, to: nil)
+            send(.leftMouseDown, window: w, at: wp, clickCount: 1)
+            send(.leftMouseUp, window: w, at: wp, clickCount: 1)
+            expect(controller.wallpaperClicks == before + 1, "a plain click between icons should count as a wallpaper click")
+        }))
         if withReveal {
             // The real thing (opt-in: it slides every window aside for about three seconds).
             steps.append(("reveal: wallpaper click", { [self] in

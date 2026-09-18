@@ -42,8 +42,8 @@ def glance():
     tiles = [
         ("+0.05 s", "CPU time added, 50 s idle", "one 1 ms window check per second"),
         ("84 MB", "resident memory, stable", "±0.2 MB across the run"),
-        ("563 / 563", "automated checks passing", "17 XCTest + 43 self-test + 503 scenario"),
-        ("29 fixed", "verified review defects", "two adversarial reviews, duplicates merged"),
+        ("594 / 594", "automated checks passing", "17 XCTest + 43 self-test + 534 scenario"),
+        ("41 caught", "problems found by adversarial review", "three reviews, each problem listed with its fix"),
     ]
     b = [text(20, 30, "QuietDesk: results at a glance", 16, INK, weight="600")]
     tw = (W - 40 - 3 * 16) / 4
@@ -162,10 +162,11 @@ def calibration():
 
 # 6. Workflows: agents and tokens ----------------------------------------------------------
 def workflows():
-    W, H = 960, 330
     rows = [("Feasibility research", 16, 2.28), ("Module implementation", 11, 1.48), ("Code review (5 lenses)", 18, 2.13),
-            ("Code review (integration)", 4, 0.60), ("Evidence documentation", 8, 1.44)]
-    b = [text(20, 30, "The five agent workflows: how much work each one was", 15, INK, weight="600")]
+            ("Code review (integration)", 4, 0.60), ("Evidence documentation", 8, 1.44),
+            ("Review: compact grid", 47, 4.04), ("Review: reveal desktop", 26, 2.20), ("Documentation review", 7, 1.09)]
+    W, H = 960, 72 + len(rows) * 36 + 40
+    b = [text(20, 30, "The eight agent workflows: how much work each one was", 15, INK, weight="600")]
     def panel(x0, title, idx, color, fmt, scale):
         b.append(text(x0 + 180, 58, title, 13, INK2))
         for i, row in enumerate(rows):
@@ -174,8 +175,8 @@ def workflows():
             v = row[idx]
             b.append(bar_h(x0 + 180, y, v * scale, 20, color))
             b.append(text(x0 + 180 + v * scale + 8, y + 15, fmt(v), 12, INK))
-    panel(20, "Agents", 1, BLUE, lambda v: str(v), 12)
-    panel(500, "Tokens (millions)", 2, ORANGE, lambda v: f"{v:.2f} M", 90)
+    panel(20, "Agents", 1, BLUE, lambda v: str(v), 5)
+    panel(500, "Tokens (millions)", 2, ORANGE, lambda v: f"{v:.2f} M", 50)
     b.append(text(20, H - 15, "Agents include the verifiers. The lead agent's own work is not counted. Source: docs/CASE-STUDY.md §6.", 12, INK2))
     write("workflows.svg", svg(W, H, "".join(b)))
 
@@ -184,7 +185,7 @@ def layers():
     W, H = 960, 360
     layers = [
         ("Application windows", "normal level (0) and above", "#f2f1ee", INK2),
-        ("QuietDesk icon panel", "desktop-icon level + 1: draws icons and labels; keyboard focus without activating", BLUE, "#ffffff"),
+        ("QuietDesk icon panel", "desktop-icon level + 2: draws icons and labels; keyboard focus without activating", BLUE, "#ffffff"),
         ("QuietDesk shield panel", "desktop-icon level + 1, under the icon panel: bitmap-free, owns wallpaper clicks", "#86b6ef", INK),
         ("WindowManager click-catcher", "desktop-icon level, only while items are hidden: a wallpaper click re-shows Finder's icons", "#f2f1ee", INK2),
         ("Finder desktop icons window", "desktop-icon level (-2147483603): emptied by the Show Items setting", "#f2f1ee", INK2),

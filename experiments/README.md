@@ -3,11 +3,11 @@
 **In plain words.** These are the small programs we ran on the real Mac to settle questions that documentation could not answer: does this setting really hide the icons, which window gets a click on a transparent pixel, will Finder accept tiny label text, where does Finder think the icons are. Each one is reversible and touches the live desktop for a few seconds at most; each section says what question it answers, how to run it, what it changes, and what happened on macOS 26.6.2. The ideas behind them are explained in [../docs/CONCEPTS.md](../docs/CONCEPTS.md).
 
 The scripts in this directory are the throwaway probes that produced the measurements in
-[docs/FEASIBILITY.md](../docs/FEASIBILITY.md), sections 3 and 4 (experiments E1–E12). They were written
+[docs/FEASIBILITY.md](../docs/FEASIBILITY.md), sections 3 and 4 (experiments E1 to E15). They were written
 during the QuietDesk build session, one per question, and are kept so that every claim in the feasibility
 document can be re-run. None of them is part of the app. Each one is reversible; the ones that touch the
 live desktop do so for a few seconds and put it back. Results below are what was observed on the session
-machine: macOS 26.6.2 (build 25G83), Finder 26.4, Apple Silicon, Command Line Tools with Swift 6.1 and the
+machine: macOS 26.6.2, Finder 26.4, Apple Silicon, Command Line Tools with Swift 6.1 and the
 macOS 15.4 SDK, two displays (built-in 1728x1117 pt @2x with a 33 pt menu bar; external 1920x1080 @1x
 placed above it), desktop sorted by Date Added with Stacks on, icon size 36, text size 12, grid spacing 26,
 148 items, iCloud Desktop sync on.
@@ -27,10 +27,9 @@ placed above it), desktop sorted by Date Added with Stacks on, icon size 36, tex
 | [textsize.applescript](textsize.applescript) | E3 | Does Finder accept a label text size of 4 | Attempts a change; Finder rejects it |
 | [textsize10.applescript](textsize10.applescript) | E3 | Does Finder accept 10, and apply it live | Yes, 2 s at text size 10 |
 | [dsstore_iloc.py](dsstore_iloc.py) | E5 | Are the icon positions stored in `~/Desktop/.DS_Store` usable | No (parses a copy; refuses the live file) |
-| [reveal-trigger.swift](reveal-trigger.swift), [reveal-probe.swift](reveal-probe.swift), [reveal-events-probe.swift](reveal-events-probe.swift) | E14 | Can Show Desktop be started without a permission, are hidden items re-shown while the desktop is revealed, and does any event announce a reveal | Yes, windows slide aside for a few seconds |
+| [reveal-trigger.swift](reveal-trigger.swift), [reveal-probe.swift](reveal-probe.swift), [reveal-events-probe.swift](reveal-events-probe.swift) | E14 | Can Show Desktop be started without a permission, are hidden items re-shown while the desktop is revealed, and does any event announce a reveal | Yes. The two probes slide your windows aside for a few seconds and bring them back. reveal-trigger leaves them aside until you run it again |
 
-Experiments E7, E9, E10 and E12 (layout reproduction, resource use, the panel level trap) were measured
-with the app itself and its `--self-test` mode; they have no standalone script here.
+Experiments E7, E9, E10, E12 and E15 (layout reproduction, resource use, the panel level trap) were measured with the app itself: its `--self-test` mode, and `scripts/measure-idle.sh 60` for E15. E13 (grid calibration) was measured from screenshots of Finder, and `--self-test` checks the three measured cells. None of these has a standalone script here.
 
 ## Conventions
 
@@ -38,10 +37,10 @@ with the app itself and its `--self-test` mode; they have no standalone script h
 |---|---|---|
 | `kCGDesktopWindowLevel` | -2147483623 | SDK header `CGWindowLevel.h`; printed by probe.swift |
 | `kCGDesktopIconWindowLevel` | -2147483603 | Same; Finder's desktop windows were measured at this level (E1) |
-| QuietDesk's overlay level | -2147483602 (icon level + 1) | E8, E10 |
+| QuietDesk's overlay levels | shield -2147483602 (icon level + 1), icon window -2147483601 (icon level + 2) | E8, E10; the icon window moved to + 2 later (CHANGELOG, Unreleased) |
 | `CGWindowListCopyWindowInfo` bounds | Global top-left origin, y down; the external display above the built-in one reports `-103,-1080 1920x1080` | probe output |
 | `NSScreen` / `NSWindow` points | Bottom-left origin, y up; hovertest converts with `screen.frame.height - y` | AppKit |
-| Building a Swift probe | `swiftc -O -o NAME NAME.swift` (no Xcode needed) | all six compile with no warnings on Swift 6.1 |
+| Building a Swift probe | `swiftc -O -o NAME NAME.swift` (no Xcode needed) | the six original probes compile with no warnings on Swift 6.1; the three reveal scripts are run with `swift NAME.swift` |
 | Running an AppleScript | `osascript NAME.applescript` | first run prompts for Automation → Finder, attributed to the terminal app |
 
 Binaries built here are ignored by [.gitignore](.gitignore).
@@ -300,9 +299,7 @@ levels in each state. `reveal-events-probe.swift` puts a transparent panel at th
 level + 1 (like QuietDesk's shield), registers for its occlusion, expose, screen and move
 notifications and for seven candidate Darwin notifications, and toggles a reveal.
 
-**Run:** `swift experiments/reveal-probe.swift` (each script slides your windows aside for a few
-seconds and leaves the desktop as it was). To see finding 1, hide desktop items first
-(`hide-toggle.sh`) and look at the screen during the reveal.
+**Run:** from the repository root, `swift experiments/reveal-probe.swift` or `swift experiments/reveal-events-probe.swift`. Each one starts a reveal, ends it a few seconds later and leaves the desktop as it was. `swift experiments/reveal-trigger.swift` sends one toggle only, so your windows stay aside until you run it again or click a window edge. To see finding 1, the desktop items must stay hidden for the whole run. `hide-toggle.sh` is too short for that, because it puts the setting back after 2 s. Instead, turn off System Settings › Desktop & Dock › Show Items › On Desktop, run the probe and watch the screen, then turn the switch back on.
 
 **Result:** the trigger works with no permission; the old `Mission Control 1` command line does
 nothing on macOS 26. Finder's hidden items are re-shown for the whole reveal, however it was
@@ -327,7 +324,7 @@ WindowManager's click-catchers gone). One window-list check takes about 1 ms.
 ## Not included
 
 - `alphatest`, `alphatest2`, `alphatest3`: superseded attempts at E6 (see alphatest4).
-- The app-level measurements E7, E9, E10 and E12: reproduce them with the app's `--self-test` mode and
+- The app-level measurements E7, E9, E10, E12 and E15: reproduce them with `scripts/measure-idle.sh 60` (E15), the app's `--self-test` mode and
   `ps` sampling as described in the feasibility document.
 - Any experiment output that lists desktop item names.
 

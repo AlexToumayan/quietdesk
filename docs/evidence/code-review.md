@@ -162,7 +162,7 @@ Tally of the 33 minors: 24 fixed (including 5 duplicates of other rows), 4 accep
   The author's desktop, the self-test (30 entries, no live selection) and every manual run had missed
   it; the verifier reproduced the `Index out of range` trap in an optimised scratch build.
 - **A destructive file-system path.** Copying `~/Desktop` into itself (#1) could only have been
-  discovered by doing it, on an iCloud-synced Desktop with 39 GB free. The reviewer, and then the
+  discovered by doing it, on a cloud-synced Desktop. The reviewer, and then the
   verifier independently, reproduced `copyItem` recursing 455 and 453 levels deep on throwaway
   directories instead.
 - **Timing bugs across the async boundary.** Undo registered after completion (#3) and the

@@ -5,5 +5,8 @@
 /hovertest
 /alphatest4
 /alphatest5
+/reveal-trigger
+/reveal-probe
+/reveal-events-probe
 *.dSYM/
 *.scpt

@@ -381,8 +381,12 @@ final class OverlayController: DesktopSurfaceDelegate {
         revealTimer = timer
     }
 
+    /// Test seam: what tells us the desktop is revealed. Tests substitute a fake so the
+    /// step-aside logic runs on every test run without sliding anyone's windows about.
+    var revealProbe: () -> Bool = { DesktopReveal.isRevealed }
+
     func checkReveal() {
-        let revealed = DesktopReveal.isRevealed
+        let revealed = revealProbe()
         guard revealed != steppedAside else { return }
         steppedAside = revealed
         DebugLog.log(revealed ? "desktop revealed: stepping aside" : "reveal ended: coming back")
