@@ -17,6 +17,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if args.contains("--self-test") { exit(SelfTest.run()) }
+        if let i = args.firstIndex(of: "--render-view-options"), i + 1 < args.count {
+            let panel = ViewOptionsWindowController.shared
+            if args.contains("--dark") { panel.window?.appearance = NSAppearance(named: .darkAqua) }
+            panel.refresh()
+            // Shown for a moment so the controls build their layers, then drawn from the layer tree.
+            panel.window?.contentView?.wantsLayer = true
+            panel.window?.orderFrontRegardless()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [args] in
+                if let content = panel.window?.contentView { Diagnostics.renderView(content, to: args[i + 1]) }
+                exit(0)
+            }
+            return
+        }
         if args.contains("--dump-layout") {
             let c = OverlayController(labelMode: settings.labelMode)
             c.prepare()

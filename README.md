@@ -143,6 +143,7 @@ Developer flags (run the bare executable, `.build/release/QuietDesk`):
 | `--test-seconds N` | Quit automatically after N seconds (restores the desktop). |
 | `--no-hide` | Show the overlay without hiding Finder's items (alignment check: icons should coincide; always uses Finder's grid, never the compact one). |
 | `--hit-test` | Prints which window the window server would deliver clicks to at several points. |
+| `--render-view-options out.png [--dark]` | Shows the View Options panel for a moment and renders its content to a PNG (layout checks without a screenshot permission). |
 | `--scenario-test [--defaults-suite NAME] [--desktop-dir PATH]` | Replays click sequences through the real overlay windows across View Options states; see Tests. |
 | `--debug-log` | Appends an event trace (clicks, relayouts, window order, View Options changes) to `~/Library/Logs/QuietDesk/debug.log`. Also `defaults write dev.quietdesk.QuietDesk debugLog -bool YES`. |
 

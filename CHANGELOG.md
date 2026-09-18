@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- View Options panel follows Finder's: left-aligned sections between full-width rules, small and
+  large document glyphs around the icon-size slider, 2×2 and 3×3 grid glyphs around grid spacing,
+  dot stops under both sliders, "Label position:" above its choices, a close button only, and
+  QuietDesk's own options grouped under their own heading.
 - Compact grid (View Options, on by default while names are On Hover or Hidden): no room is reserved
   for names, so the desktop packs as densely as the icons allow, and a name materialises over its
   neighbours when you point at its item (120 ms fade and rise). Off keeps Finder's grid, which is

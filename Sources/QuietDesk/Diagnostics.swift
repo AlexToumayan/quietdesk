@@ -71,6 +71,33 @@ enum Diagnostics {
         print("candidates: " + names.enumerated().map { "\($0.offset + 1)=\($0.element)" }.joined(separator: "  "))
         print("rendered \(path)")
     }
+    /// Renders a view (e.g. the View Options panel's content) over the window background colour
+    /// of its appearance. For checking layouts without a screenshot permission.
+    static func renderView(_ view: NSView, to path: String) {
+        view.layoutSubtreeIfNeeded()
+        let size = view.bounds.size, scale: CGFloat = 2
+        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * scale), pixelsHigh: Int(size.height * scale),
+                                         bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                         colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return }
+        rep.size = size     // before the context exists, so it maps points to pixels
+        guard let ctx = NSGraphicsContext(bitmapImageRep: rep) else { return }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = ctx
+        view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            NSColor.windowBackgroundColor.setFill()
+            NSRect(origin: .zero, size: size).fill()
+            if let layer = view.layer {
+                // The live layer tree: what the new system controls actually draw through.
+                layer.render(in: ctx.cgContext)
+            } else {
+                view.displayIgnoringOpacity(view.bounds, in: ctx)
+            }
+        }
+        NSGraphicsContext.restoreGraphicsState()
+        guard let out = rep.representation(using: .png, properties: [:]) else { return }
+        try? out.write(to: URL(fileURLWithPath: path))
+        print("rendered \(path) (\(Int(size.width)) x \(Int(size.height)) pt)")
+    }
 }
 
 extension NSFont {
@@ -80,4 +107,5 @@ extension NSFont {
         let descriptor = fontDescriptor.addingAttributes([.traits: traits])
         return NSFont(descriptor: descriptor, size: pointSize) ?? self
     }
+
 }
