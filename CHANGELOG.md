@@ -9,6 +9,14 @@
   the wallpaper click did nothing. macOS sends no event for a reveal, so the state is read from the
   window list once a second (about 1 ms). The wallpaper click uses a private Dock entry point that
   fails safe. Experiment E14 in FEASIBILITY.md.
+- Fixed: clicking the wallpaper to reveal the desktop worked once and then stopped for the rest of
+  the session. A reveal the person ended quickly looked to QuietDesk like a reveal that never
+  happened, so it stopped asking for one. A request is now judged by whether a reveal was seen at
+  all, and seeing any reveal later turns the click back on. Two clicks in quick succession cancel
+  each other out, so neither of them is taken as proof that reveals do not work. The end of a reveal
+  is also confirmed by a second read of the window list a moment later, so the icons no longer come
+  back for an instant and vanish again while the windows are still sliding into place. Checks that
+  were queued up stay quiet while the displays sleep and on a QuietDesk that has been turned off.
 - The View Options panel is laid out on first use instead of at launch (about 7 MB less at rest).
 - View Options panel follows Finder's: left-aligned sections between full-width rules, small and
   large document glyphs around the icon-size slider, 2×2 and 3×3 grid glyphs around grid spacing,

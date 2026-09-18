@@ -114,6 +114,7 @@ final class OverlayController: DesktopSurfaceDelegate {
             guard let self, let w = note.object as? NSWindow, self.windows.contains(where: { $0 === w }) else { return }
             self.views.forEach { $0.clearHover() }
         })
+        watching = true
         scheduleRevealCheck(every: 1.0)
         checkReveal()                               // enabled in the middle of a reveal: start out of the way
         // No reveal can start while the displays sleep or the session is switched out: no checks then.
@@ -136,6 +137,7 @@ final class OverlayController: DesktopSurfaceDelegate {
     }
 
     func stop() {
+        watching = false
         revealTimer?.invalidate(); revealTimer = nil
         hide()
         watcher = nil
@@ -369,6 +371,25 @@ final class OverlayController: DesktopSurfaceDelegate {
     /// Off in tests that click the wallpaper but must not fling the person's windows about.
     var revealOnWallpaperClick = true
     private(set) var wallpaperClicks = 0
+    /// Reveals asked for, and reveals actually seen in the window list. A request is judged by
+    /// whether a reveal was SEEN since it was made, never by whether one is on screen a moment
+    /// later: a reveal the person ends quickly is still a reveal that worked.
+    private(set) var revealRequests = 0
+    private(set) var revealsObserved = 0
+    /// When the first read saying the reveal has ended came in. The end is acted on only when a
+    /// later read agrees, and not before a short gap: reads are not evenly spaced, and two of them
+    /// can fall a few tens of milliseconds apart.
+    private var revealEndFirstRead: TimeInterval?
+    /// When the last reveal was asked for. Two requests close together cancel each other out (the
+    /// entry point is a toggle), so neither of them can say whether reveals work.
+    private var lastRevealRequestAt: TimeInterval?
+    /// How long after a request we look back to judge it, and how far apart two reads must be
+    /// before the second one confirms the end of a reveal.
+    private let revealVerdictDelay: TimeInterval = 1.2
+    private let revealEndConfirmGap: TimeInterval = 0.07
+    /// True between startWatching and stop: the delayed re-checks must not restart the timer
+    /// or move windows on a controller that has been taken down.
+    private var watching = false
 
     /// The system gives no event for a reveal starting or ending (FEASIBILITY E14), so the state
     /// is read from the window list: once a second with generous tolerance at rest (about 1 ms
@@ -387,10 +408,26 @@ final class OverlayController: DesktopSurfaceDelegate {
 
     func checkReveal() {
         let revealed = revealProbe()
-        guard revealed != steppedAside else { return }
+        guard revealed != steppedAside else { revealEndFirstRead = nil; return }
+        if !revealed {
+            // The end of a reveal is confirmed by a later read. While the system slides the
+            // windows back, the Dock's window can drop out of the list for a moment, and coming
+            // back on that made the icons appear and vanish again. The confirming read has to be
+            // a short time later, not just the next one: reads are not evenly spaced.
+            let now = revealNow()
+            guard let first = revealEndFirstRead else {
+                revealEndFirstRead = now
+                revealAfter(0.08) { [weak self] in self?.checkRevealIfWatching() }
+                return
+            }
+            guard now - first >= revealEndConfirmGap else { return }
+        }
+        revealEndFirstRead = nil
         steppedAside = revealed
         DebugLog.log(revealed ? "desktop revealed: stepping aside" : "reveal ended: coming back")
         if revealed {
+            revealsObserved += 1
+            revealUnseen = false                     // reveals are visible after all
             // macOS is showing Finder's own items now; ours on top would be doubles. A rename in
             // progress ends quietly first: no alert from inside a timer, and no second commit when
             // ordering the key window out makes it resign key.
@@ -406,25 +443,54 @@ final class OverlayController: DesktopSurfaceDelegate {
 
     /// Set when a reveal we asked for never showed up in the window list: either the Dock ignored
     /// the request or the detection no longer matches this macOS. Revealing without being able to
-    /// step aside would leave doubled icons, so wallpaper clicks stop asking for the session.
-    private var revealUnseen = false
+    /// step aside would leave doubled icons, so wallpaper clicks stop asking until a reveal is
+    /// seen again (one started with F11 or the gesture clears it).
+    private(set) var revealUnseen = false
+
+    /// Test seams for the request path: what asks the Dock for a reveal, whether the system
+    /// gesture is on, and how the follow-up checks are delayed.
+    var revealToggle: () -> Bool = { DesktopReveal.toggle() }
+    var revealGestureEnabled: () -> Bool = { DesktopReveal.clickRevealsDesktop }
+    var revealAfter: (TimeInterval, @escaping () -> Void) -> Void = { delay, body in
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: body)
+    }
+    var revealNow: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+
+    /// Whether a delayed re-check may still act: not on a controller that has been taken down, and
+    /// not while checks are deliberately suspended (displays asleep, session switched out), where
+    /// the timer is off on purpose. A reveal in progress keeps them alive so we can come back.
+    private var revealChecksLive: Bool { watching && (revealTimer != nil || steppedAside) }
+
+    private func checkRevealIfWatching() {
+        guard revealChecksLive else { return }
+        checkReveal()
+    }
 
     func surfaceWallpaperClicked() {
         wallpaperClicks += 1
-        guard revealOnWallpaperClick, settings.revealDesktopOnWallpaperClick, !revealUnseen, DesktopReveal.clickRevealsDesktop else { return }
-        let sent = DesktopReveal.toggle()
+        guard revealOnWallpaperClick, settings.revealDesktopOnWallpaperClick, !revealUnseen, revealGestureEnabled() else { return }
+        revealRequests += 1
+        let requests = revealRequests
+        let seen = revealsObserved
+        let sent = revealToggle()
         DebugLog.log("wallpaper click -> show desktop (\(sent ? "sent" : "entry point unavailable"))")
         guard sent else { revealUnseen = true; return }
+        // A click that follows another one closely cancels the reveal that one asked for, before
+        // any read can see it. Neither request tells us anything then, so neither gets a verdict.
+        let now = revealNow()
+        let overlapped = lastRevealRequestAt.map { now - $0 < revealVerdictDelay } ?? false
+        lastRevealRequestAt = now
         // The Dock needs a moment; look again shortly rather than waiting for the slow tick.
-        for delay in [0.15, 0.35, 0.7] { DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.checkReveal() } }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
-            guard let self, self.revealTimer != nil || self.steppedAside else { return }
+        for delay in [0.15, 0.35, 0.7] { revealAfter(delay) { [weak self] in self?.checkRevealIfWatching() } }
+        revealAfter(revealVerdictDelay) { [weak self] in
+            guard let self, self.revealChecksLive else { return }
             self.checkReveal()
-            if !self.steppedAside {
-                self.revealUnseen = true
-                self.log.notice("a requested reveal was never observed; wallpaper clicks will only deselect until QuietDesk is turned off and on")
-                DebugLog.log("reveal requested but never observed: wallpaper-click reveal off for this session")
-            }
+            // Only when no reveal at all was seen since this click, and nothing is being revealed
+            // now, and no other click asked around the same time (which makes the state ambiguous).
+            guard !overlapped, self.revealsObserved == seen, !self.steppedAside, self.revealRequests == requests else { return }
+            self.revealUnseen = true
+            self.log.notice("a requested reveal was never observed; wallpaper clicks will only deselect until a reveal is seen or QuietDesk is turned off and on")
+            DebugLog.log("reveal requested but never observed: wallpaper-click reveal off for this session")
         }
     }
 

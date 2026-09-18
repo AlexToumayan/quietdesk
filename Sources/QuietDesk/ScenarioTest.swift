@@ -22,6 +22,14 @@ final class ScenarioTest {
 
     private let withReveal = CommandLine.arguments.contains("--with-reveal")
 
+    /// The simulated reveal: what the probe reports, how many reveals were asked for, a clock the
+    /// round moves by hand, and the controller's delayed follow-up checks with the time each is due,
+    /// captured so the rounds below can run them in order.
+    private var revealed = false
+    private var revealToggles = 0
+    private var revealClock: TimeInterval = 1000
+    private var pendingReveal: [(due: TimeInterval, body: () -> Void)] = []
+
     init(controller: OverlayController) {
         self.controller = controller
         controller.revealOnWallpaperClick = false   // never fling the person's windows about by surprise
@@ -54,11 +62,44 @@ final class ScenarioTest {
         }
     }
 
-    private func clickWallpaper() {
+    /// `gap` is how long since the previous click, on the simulated clock.
+    private func clickWallpaper(after gap: TimeInterval = 2.0) {
+        revealClock += gap
         guard let shield = controller.shields.first, let sv = shield.contentView else { return }
         let p = sv.convert(NSPoint(x: 40, y: 200), to: nil)   // far from the icon column
         send(.leftMouseDown, window: shield, at: p, clickCount: 1)
         send(.leftMouseUp, window: shield, at: p, clickCount: 1)
+    }
+
+    /// Runs the next captured follow-up check, earliest first, moving the clock to when it is due.
+    private func runNextPendingReveal() {
+        guard let i = pendingReveal.indices.min(by: { pendingReveal[$0].due < pendingReveal[$1].due }) else { return }
+        let item = pendingReveal.remove(at: i)
+        revealClock = max(revealClock, item.due)
+        item.body()
+    }
+
+    /// Runs the next few captured follow-up checks.
+    private func runPendingReveal(_ count: Int) {
+        for _ in 0..<count where !pendingReveal.isEmpty { runNextPendingReveal() }
+    }
+
+    /// Runs every captured follow-up check, including the ones those checks schedule.
+    private func drainReveal() {
+        var safety = 40
+        while !pendingReveal.isEmpty, safety > 0 { safety -= 1; runNextPendingReveal() }
+    }
+
+    /// One read of the window list, as a timer tick makes it: the clock moves on first.
+    private func readReveal(after gap: TimeInterval = 0.25) {
+        revealClock += gap
+        controller.checkReveal()
+    }
+
+    /// One read plus everything it schedules (the end of a reveal takes a later read to confirm).
+    private func tickReveal() {
+        readReveal()
+        drainReveal()
     }
 
     private func expect(_ condition: Bool, _ message: @autoclosure () -> String) {
@@ -264,7 +305,12 @@ final class ScenarioTest {
         steps.append(("simulated reveal: come back", { [self] in
             controller.revealProbe = { false }
             controller.checkReveal()
-            expect(!controller.steppedAside, "QuietDesk should come back when the reveal ends")
+            expect(controller.steppedAside, "one read saying the reveal ended is not enough to come back")
+            controller.checkReveal()
+            expect(controller.steppedAside, "a second read straight afterwards is not enough either")
+        }))
+        steps.append(("simulated reveal: back on screen", { [self] in
+            expect(!controller.steppedAside, "QuietDesk should come back a moment after the reveal ends")
             expect(controller.windows.contains { $0.isVisible } && controller.shields.allSatisfy { $0.isVisible }, "QuietDesk's windows should be back on screen")
             controller.revealProbe = { DesktopReveal.isRevealed }
         }))
@@ -279,28 +325,163 @@ final class ScenarioTest {
             send(.leftMouseUp, window: w, at: wp, clickCount: 1)
             expect(controller.wallpaperClicks == before + 1, "a plain click between icons should count as a wallpaper click")
         }))
+        // Repeated wallpaper-click reveals, all through the test seams: nothing asks the real Dock
+        // and no window on this screen moves. The first cycle ends the reveal before the delayed
+        // check that judges whether the reveal happened, which used to turn the feature off.
+        steps.append(("repeated wallpaper-click reveals", { [self] in
+            round = "repeated reveals"
+            let settingWas = Settings.shared.revealDesktopOnWallpaperClick
+            Settings.shared.revealDesktopOnWallpaperClick = true
+            revealed = false; revealToggles = 0; pendingReveal = []; revealClock = 1000
+            controller.revealProbe = { [self] in revealed }
+            controller.revealToggle = { [self] in revealToggles += 1; return true }
+            controller.revealGestureEnabled = { true }
+            controller.revealAfter = { [self] delay, body in pendingReveal.append((revealClock + delay, body)) }
+            controller.revealNow = { [self] in revealClock }
+            controller.revealOnWallpaperClick = true
+
+            clickWallpaper()
+            expect(revealToggles == 1, "a plain wallpaper click should ask for a reveal")
+            revealed = true
+            runPendingReveal(1)                         // the first quick re-check after the request
+            expect(controller.steppedAside, "QuietDesk should step aside for the first reveal")
+            expect(controller.windows.allSatisfy { !$0.isVisible }, "no icon window should be on screen during a reveal")
+            revealed = false                            // the person ends it straight away
+            readReveal(); drainReveal()                 // the delayed judgement runs in here too
+            expect(!controller.steppedAside, "QuietDesk should come back when the first reveal ends")
+            expect(!controller.revealUnseen, "a reveal that was seen and ended quickly must leave the feature on")
+
+            clickWallpaper()
+            expect(revealToggles == 2, "a second wallpaper click should ask for a reveal too")
+            revealed = true
+            drainReveal()
+            expect(controller.steppedAside, "QuietDesk should step aside for the second reveal")
+            revealed = false
+            readReveal(after: 0.05)
+            expect(controller.steppedAside, "one read saying the reveal ended must not bring the icons back")
+            readReveal(after: 0.05)
+            expect(controller.steppedAside, "two reads a moment apart must not bring the icons back either")
+            revealed = true                             // the window list flickered mid-reveal
+            drainReveal()
+            expect(controller.steppedAside, "a flickering read must leave QuietDesk stepped aside")
+            revealed = false
+            tickReveal()
+            expect(!controller.steppedAside, "QuietDesk should come back when the second reveal ends")
+            expect(controller.windows.contains { $0.isVisible } && controller.shields.allSatisfy { $0.isVisible }, "QuietDesk's windows should be back after repeated reveals")
+
+            // Two clicks a quarter second apart. The reveal the first one asked for is on screen but
+            // nothing has read the window list yet, and the second click cancels it. Neither click
+            // can say reveals do not work, and the next one must still ask for one.
+            let beforePair = revealToggles
+            clickWallpaper()
+            revealed = true
+            clickWallpaper(after: 0.25)
+            revealed = false
+            expect(revealToggles == beforePair + 2, "both of two quick wallpaper clicks should ask for a reveal")
+            drainReveal()
+            expect(!controller.revealUnseen, "two wallpaper clicks a moment apart must not turn the feature off")
+            clickWallpaper()
+            expect(revealToggles == beforePair + 3, "a wallpaper click after those two should still ask for a reveal")
+            revealed = true; tickReveal(); revealed = false; tickReveal()
+            expect(!controller.steppedAside, "QuietDesk should be back after that reveal")
+
+            drainReveal()
+            let beforeFailSafe = revealToggles
+            clickWallpaper()                            // a reveal that never appears: fail safe
+            expect(revealToggles == beforeFailSafe + 1, "a wallpaper click should still ask for a reveal")
+            drainReveal()
+            expect(controller.revealUnseen, "a reveal that is never seen should stop wallpaper clicks asking")
+            clickWallpaper()
+            expect(revealToggles == beforeFailSafe + 1, "after that, a wallpaper click should only deselect")
+            revealed = true                             // a reveal seen later (F11) shows it does work
+            tickReveal()
+            expect(!controller.revealUnseen, "seeing a reveal should let wallpaper clicks ask again")
+            revealed = false
+            tickReveal()
+            expect(!controller.steppedAside, "QuietDesk should come back at the end of that reveal")
+            clickWallpaper()
+            expect(revealToggles == beforeFailSafe + 2, "a wallpaper click should ask for a reveal again")
+            revealed = true; tickReveal(); revealed = false; tickReveal()
+            expect(!controller.steppedAside && controller.windows.contains { $0.isVisible }, "QuietDesk should be back on screen at the end of the round")
+
+            controller.revealOnWallpaperClick = false
+            controller.revealProbe = { DesktopReveal.isRevealed }
+            controller.revealToggle = { DesktopReveal.toggle() }
+            controller.revealGestureEnabled = { DesktopReveal.clickRevealsDesktop }
+            controller.revealAfter = { delay, body in DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: body) }
+            controller.revealNow = { ProcessInfo.processInfo.systemUptime }
+            Settings.shared.revealDesktopOnWallpaperClick = settingWas
+            pendingReveal = []
+        }))
+        // Checks are suspended while the displays sleep. A follow-up check left over from a click
+        // just before must not move windows, judge the request, or start the timer again.
+        steps.append(("no reveal checks while the displays sleep", { [self] in
+            round = "displays asleep"
+            let settingWas = Settings.shared.revealDesktopOnWallpaperClick
+            Settings.shared.revealDesktopOnWallpaperClick = true
+            revealed = false; pendingReveal = []      // the clock carries on from the round before
+            controller.revealProbe = { [self] in revealed }
+            controller.revealToggle = { [self] in revealToggles += 1; return true }
+            controller.revealGestureEnabled = { true }
+            controller.revealAfter = { [self] delay, body in pendingReveal.append((revealClock + delay, body)) }
+            controller.revealNow = { [self] in revealClock }
+            controller.revealOnWallpaperClick = true
+            let wc = NSWorkspace.shared.notificationCenter
+
+            clickWallpaper()
+            wc.post(name: NSWorkspace.screensDidSleepNotification, object: nil)
+            drainReveal()                                // nothing was revealed and nothing may judge that
+            expect(!controller.revealUnseen, "a request left over from before sleep must not turn the feature off")
+            clickWallpaper()
+            revealed = true                              // nothing can reveal the desktop now, but be sure
+            drainReveal()
+            expect(!controller.steppedAside, "no follow-up check should move windows while the displays sleep")
+            revealed = false
+            wc.post(name: NSWorkspace.screensDidWakeNotification, object: nil)
+            revealed = true
+            tickReveal()
+            expect(controller.steppedAside, "checks should run again once the displays wake")
+            revealed = false
+            tickReveal()
+            expect(!controller.steppedAside && controller.windows.contains { $0.isVisible }, "QuietDesk should be back on screen after that")
+
+            controller.revealOnWallpaperClick = false
+            controller.revealProbe = { DesktopReveal.isRevealed }
+            controller.revealToggle = { DesktopReveal.toggle() }
+            controller.revealGestureEnabled = { DesktopReveal.clickRevealsDesktop }
+            controller.revealAfter = { delay, body in DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: body) }
+            controller.revealNow = { ProcessInfo.processInfo.systemUptime }
+            Settings.shared.revealDesktopOnWallpaperClick = settingWas
+            pendingReveal = []
+        }))
         if withReveal {
             // The real thing (opt-in: it slides every window aside for about three seconds).
-            steps.append(("reveal: wallpaper click", { [self] in
-                round = "reveal desktop"
-                controller.revealOnWallpaperClick = true
-                expect(DesktopReveal.clickRevealsDesktop, "System Settings should have Click wallpaper to reveal desktop on for this round")
-                clickWallpaper()
-            }))
-            for _ in 0..<5 { steps.append(("reveal: waiting", {})) }
-            steps.append(("reveal: stepped aside", { [self] in
-                expect(DesktopReveal.isRevealed, "the desktop should be revealed after a wallpaper click")
-                expect(controller.steppedAside, "QuietDesk should step aside while the desktop is revealed")
-                expect(controller.windows.allSatisfy { !$0.isVisible } && controller.shields.allSatisfy { !$0.isVisible }, "no QuietDesk window should be on screen during a reveal")
-                if DesktopReveal.isRevealed { DesktopReveal.toggle() }   // end it the way F11 would (it is a toggle: only when revealed)
-            }))
-            for _ in 0..<7 { steps.append(("reveal: waiting", {})) }
-            steps.append(("reveal: back", { [self] in
-                expect(!DesktopReveal.isRevealed, "the reveal should have ended")
-                expect(!controller.steppedAside, "QuietDesk should come back when the reveal ends")
-                expect(controller.windows.contains { $0.isVisible } && controller.shields.allSatisfy { $0.isVisible }, "QuietDesk's windows should be back on screen")
-                controller.revealOnWallpaperClick = false
-            }))
+            // Two cycles, and the second one is ended quickly, which is how the owner met the bug.
+            for cycle in 1...2 {
+                steps.append(("reveal \(cycle): wallpaper click", { [self] in
+                    round = "reveal desktop \(cycle)"
+                    controller.revealOnWallpaperClick = true
+                    expect(DesktopReveal.clickRevealsDesktop, "System Settings should have Click wallpaper to reveal desktop on for this round")
+                    let before = controller.revealRequests
+                    clickWallpaper()
+                    expect(controller.revealRequests == before + 1, "a wallpaper click should ask the Dock for a reveal")
+                }))
+                for _ in 0..<(cycle == 1 ? 5 : 3) { steps.append(("reveal \(cycle): waiting", {})) }
+                steps.append(("reveal \(cycle): stepped aside", { [self] in
+                    expect(DesktopReveal.isRevealed, "the desktop should be revealed after a wallpaper click")
+                    expect(controller.steppedAside, "QuietDesk should step aside while the desktop is revealed")
+                    expect(controller.windows.allSatisfy { !$0.isVisible } && controller.shields.allSatisfy { !$0.isVisible }, "no QuietDesk window should be on screen during a reveal")
+                    if DesktopReveal.isRevealed { DesktopReveal.toggle() }   // end it the way F11 would (it is a toggle: only when revealed)
+                }))
+                for _ in 0..<7 { steps.append(("reveal \(cycle): waiting", {})) }
+                steps.append(("reveal \(cycle): back", { [self] in
+                    expect(!DesktopReveal.isRevealed, "the reveal should have ended")
+                    expect(!controller.steppedAside, "QuietDesk should come back when the reveal ends")
+                    expect(controller.windows.contains { $0.isVisible } && controller.shields.allSatisfy { $0.isVisible }, "QuietDesk's windows should be back on screen")
+                    expect(!controller.revealUnseen, "a reveal that worked must leave wallpaper-click reveals on")
+                    controller.revealOnWallpaperClick = false
+                }))
+            }
         }
         steps.append(("finish", { [self] in
             if withReveal, DesktopReveal.isRevealed { DesktopReveal.toggle() }   // never leave the windows slid aside
