@@ -1,10 +1,25 @@
-# Manual validation checklist
+# My validation checklist
 
-Run with `build/QuietDesk.app` (so permission prompts are attributed to the app), release build.
-Tick each line with the result and the macOS version. Items marked (P) were exercised programmatically;
-everything else is unverified until ticked.
+**In plain words.** This is the list I work through by hand before I am willing to call a version done.
+Some things a computer can check for itself, and those live in the automated tests. The things below
+cannot be checked that way. Whether a name appears promptly when I point at an icon, whether dragging a
+file feels the way it feels in Finder, whether my desktop comes back exactly as it was: for those I have
+to look at my own screen and decide.
+
+**How I run it.** I use `build/QuietDesk.app`, the packaged app rather than the bare program, so that any
+permission prompt macOS shows is attributed to QuietDesk and not to my terminal, and I build it for release
+rather than for debugging. Then I go down the list and tick each line with what I saw and which version of
+macOS I saw it on.
+
+**What the notes in brackets mean.** Some lines end with a note like `(P: ...)` or `(Automated ...)`. That
+means a program has already exercised the behaviour, and the note says what it checked. I still look at
+those by hand, because an automated check can only confirm the thing it was told to look for. A line with
+no such note is unverified until I have ticked it myself, and so is any part of the Performance section
+that its `(P, partially)` mark does not cover.
 
 ## Alignment and rendering
+
+Does QuietDesk's desktop look like the one it replaced?
 - [ ] `.build/release/QuietDesk --no-hide --test-seconds 30` (this flag always uses Finder's grid, not the compact one): overlay icons coincide with Finder's icons (no visible doubling). (P: order and cell centres matched a screenshot.)
 - [ ] Enable: native icons disappear and QuietDesk's appear with no gap in which neither is visible.
 - [ ] Labels: On Hover shows the full name promptly; moving away hides it; no flicker; long names wrap and stay on screen at the right and bottom edges.
@@ -17,6 +32,11 @@ everything else is unverified until ticked.
 - [ ] Tag colour dots appear for tagged items; alias badge on aliases.
 
 ## Reveal desktop
+
+macOS can slide every window aside to show the bare desktop. While that is happening, Finder puts its own
+icons and names back, so QuietDesk has to step out of the way and then return. These lines check that the
+handover is clean in both directions, with no moment where two sets of icons are visible at once.
+
 - [ ] Click the wallpaper: every window slides aside (with System Settings › Desktop & Dock › "Click wallpaper to reveal desktop" set to Always); Finder's own icons with names are what you see, with no doubled icons; click the wallpaper or a window edge: the windows return and QuietDesk's quiet desktop is back within about a quarter of a second. (Automated once: `--scenario-test --with-reveal`.)
 - [ ] F11 (or fn-F11), the spread gesture and a Desktop hot corner behave the same; doubled icons, if any, last up to about a second and a half (the check runs once a second with half a second of tolerance).
 - [ ] With Stage Manager off and the setting on "Only in Stage Manager", a wallpaper click only deselects; the same with QuietDesk's own menu switch (Click Wallpaper to Reveal Desktop) off.
@@ -26,6 +46,9 @@ everything else is unverified until ticked.
 - [ ] Mission Control and Launchpad: QuietDesk's icons are hidden for their duration and return afterwards.
 
 ## Selection and keyboard
+
+Every way of picking an item, with the mouse and without one.
+
 - [ ] Single click selects; Cmd-click toggles; Shift-click extends; click on wallpaper deselects.
 - [ ] Rubber-band selection from wallpaper and from between icons.
 - [ ] Arrow keys move selection through the grid; Escape clears; Cmd-A selects all.
@@ -34,6 +57,10 @@ everything else is unverified until ticked.
 - [ ] Cmd-N opens a new Finder window; Cmd-Shift-N creates "untitled folder" on the desktop.
 
 ## Opening, files, undo
+
+The section that touches real files. Nothing here may lose or damage anything, and anything that changes a
+file has to be undoable in the same way Finder would undo it.
+
 - [ ] Double-click opens files, folders and apps; Cmd-O and Cmd-Down open the selection.
 - [ ] Open With ▸ lists the apps with the default first; choosing one opens the file there.
 - [ ] Return on a selected item starts renaming with the stem selected; Return commits, Escape cancels, clicking elsewhere commits; renaming to an existing name shows an error and keeps editing; a slow second click on a selected name also starts renaming.
@@ -49,6 +76,9 @@ everything else is unverified until ticked.
 - [ ] Show Original on an alias reveals the original in Finder.
 
 ## View Options and menus
+
+The controls themselves, and whether changing one of them quietly breaks another.
+
 - [ ] Menu › Turn QuietDesk Off restores the native desktop and keeps the eye icon (open); Turn On brings the layer back (slashed).
 - [ ] Right-click on the wallpaper shows New Folder, Get Info, Change Wallpaper, Use Stacks, Group Stacks By, Sort By, Item Labels, Show View Options, Paste.
 - [ ] Show View Options opens the panel; moving Grid spacing re-flows the grid live; the tightest setting matches Finder's tightest grid; icon size and text size apply live.
@@ -62,12 +92,20 @@ everything else is unverified until ticked.
 - [ ] With QuietDesk off, Finder's grid at icon 32 / tightest spacing has 48 pt columns and 60 pt rows; turning QuietDesk on with Compact grid off keeps every icon exactly where it was.
 
 ## Stacks and sorting
+
+Finder's own ways of tidying a desktop, now done by QuietDesk. The order on screen has to match what Finder
+would have shown.
+
 - [ ] Single click on a stack expands it in place (items appear after it, others shift); click again collapses.
 - [ ] Sort By ▸ Name / Kind / Date Modified reorder the grid; "Finder's Setting" returns to Finder's order.
 - [ ] Stacks ▸ Off shows files individually; Group by Kind builds Images / PDF Documents / … stacks.
 - [ ] Sort By ▸ None (Finder Positions) on a desktop that uses manual positions: icons appear where Finder had them; dragging an icon moves it and Finder shows it there after disabling QuietDesk. (Needs a manually arranged desktop; not tested here.)
 
 ## Drag and drop
+
+Moving things by hand, into the desktop and out of it, plus the desktop noticing changes I made somewhere
+else.
+
 - [ ] Drag an item to a Finder window (move within volume), to an app (opens/inserts), to the Dock's Trash.
 - [ ] Multi-item drag shows an item-count badge.
 - [ ] Drop a file from a Finder window onto the desktop (moves into ~/Desktop) and onto a folder icon (moves into the folder); never overwrites an existing name.
@@ -77,6 +115,10 @@ everything else is unverified until ticked.
 - [ ] Mounting/unmounting a disk image or USB drive adds/removes its icon.
 
 ## macOS integration
+
+The places where a layer drawn on top of the desktop usually goes wrong: other Spaces, full-screen apps,
+Stage Manager, a display unplugged mid-session, Finder restarted underneath it.
+
 - [ ] Show Desktop (F11 / trackpad spread): see "Reveal desktop" above (QuietDesk steps aside; Finder's own items show).
 - [ ] Mission Control: overlay is not shown as a window; returns intact.
 - [ ] Switching Spaces: overlay present on every Space; nothing duplicated.
@@ -90,6 +132,10 @@ everything else is unverified until ticked.
 - [ ] Launch at Login from the .app: enabling succeeds (or shows the signature error); the app starts after a reboot.
 
 ## Restoration and safety
+
+The section that matters most to me. However QuietDesk stops, whether I switch it off, quit it, or it is
+killed outright, my real desktop has to come back and my files have to be untouched.
+
 - [ ] Enabled off: native icons return immediately, exactly as before.
 - [ ] Quit and Restore Desktop: same.
 - [ ] `kill -9` the app: native icons stay hidden (expected); launching the app again restores them at startup, before anything else happens.
@@ -98,6 +144,11 @@ everything else is unverified until ticked.
 - [ ] No file on the Desktop changed name, date, flags or iCloud status (`ls -lO@ ~/Desktop` before and after).
 
 ## Performance (P, partially)
-- [ ] Activity Monitor, 5 minutes idle: 0 % CPU, no wakeups beyond the baseline, memory stable.
+
+I asked for an app I could forget was running, so this is where I check that it costs me nothing while I am
+not using it.
+
+- [ ] Activity Monitor, 5 minutes idle: 0 % CPU, memory stable, and no wakeups beyond the reveal
+  check, which is one look at the window list a second (about 1 ms) for as long as QuietDesk is on.
 - [ ] While hovering across all icons for 30 s: brief CPU, back to 0 % immediately after.
 - [ ] Energy tab shows no "Preventing Sleep" and no GPU use at idle.

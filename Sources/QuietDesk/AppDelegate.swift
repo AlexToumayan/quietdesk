@@ -17,6 +17,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if args.contains("--self-test") { exit(SelfTest.run()) }
+        // A scenario run works in a preferences domain of its own; clear out the ones earlier runs
+        // could not take with them before this one adds another.
+        if scenarioTest { Settings.sweepStaleScenarioSuites() }
         if let i = args.firstIndex(of: "--render-view-options"), i + 1 < args.count {
             let panel = ViewOptionsWindowController.shared
             if args.contains("--dark") { panel.window?.appearance = NSAppearance(named: .darkAqua) }
@@ -76,7 +79,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if DebugLog.enabled { DebugLog.log("launch pid=\(ProcessInfo.processInfo.processIdentifier) enabled=\(settings.enabled) version=\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev")") }
         if settings.enabled || scenarioTest { enable() }
         if scenarioTest {
-            guard let c = controller else { print("scenario test: overlay could not be prepared (Desktop access?)"); exit(2) }
+            guard let c = controller else {
+                print("scenario test: overlay could not be prepared (Desktop access?)")
+                Settings.removeScenarioSuite()
+                exit(2)
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { ScenarioTest(controller: c).start() }
         }
 
@@ -90,6 +97,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         disable()
+        // A scenario-test run that is quit or killed still takes its private domain with it.
+        Settings.removeScenarioSuite()
     }
 
     /// Cmd-H while the overlay is key would hide our windows with the app; the desktop

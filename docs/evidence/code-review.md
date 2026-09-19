@@ -1,27 +1,36 @@
 # Code review: adversarial lenses, verified by skeptics
 
-**In plain words.** Once the app was feature-complete, six reviewers each looked for one kind of problem (file safety, clicks and focus, idle cost, restoring the desktop, layout maths, how the parts fit together). Every problem they raised went to a separate skeptic who was told to disbelieve it unless the code proved it. Fifteen real defects survived that filter, two of them serious, and all were fixed; one claim was rejected with a written reason. This page lists each finding, what could have gone wrong for a user, and how it was resolved. Ideas explained simply: [CONCEPTS.md](../CONCEPTS.md).
+**In plain words.** Once the app did everything I wanted, I had it taken apart before I trusted it. Six AI reviewers each hunted for one kind of problem: file safety, clicks and focus, idle cost, restoring the desktop, layout maths, and how the separate parts fit together. Every problem they raised went to a separate skeptic who was told to disbelieve it unless the code proved it. Fifteen real defects survived that filter, two of them serious, and I had them fixed, one of them only in part. One claim was thrown out, with the reasoning written down. This page lists each finding, what could have gone wrong for you, and how it ended. Ideas explained simply: [CONCEPTS.md](../CONCEPTS.md).
 
-After the feature set was complete, the codebase went through two automated review workflows in the
-same session. Each workflow gave one reviewer agent a single lens (a dimension of failure to hunt for),
-then handed every non-minor claim to an independent verifier agent whose instructions were to default
-to "not real" unless the failure could be shown from the code. Both roles were forbidden to run the
-app live, change system preferences, touch `~/Desktop` or touch git; they could build, run the pure
-`--self-test`, `--dump-layout` and `--render` flags, and write scratch programs. This page records
-the design of that review, every confirmed finding with what the current code does about it, the one
-claim the verifier rejected, and the minor findings with their status. Line numbers cited by the agents
-refer to the code at review time; the resolution column names symbols in the code as it is now.
+**If you are five.** I made a toy. Before I said "finished", six friends each checked one part of it: does it tip over, does it lose pieces, is there a sharp edge. When a friend shouted "broken!", I sent a different friend to look, and that one was allowed to believe it only if they could see the break themselves. Fifteen breaks were real, so I mended them. One was not, and I wrote down why.
+
+Once the feature set was complete I put the whole codebase through two review workflows, both in the
+same working session. The review was my call, and the product rules the agents were held to are
+mine. Claude, the AI I was directing, wrote the prompts and the scripts, ran them, and started a
+short-lived agent for each job.
+
+Each workflow gave one reviewer agent a single lens, meaning one kind of failure to hunt for, and
+then handed every non-minor claim to an independent verifier agent whose instructions were to
+default to "not real" unless the failure could be shown from the code. I did not let either role run
+the app live, change system settings, touch my Desktop folder or touch git. They could build the
+package, run the pure `--self-test`, `--dump-layout` and `--render` flags, and write throwaway test
+programs.
+
+This page records the shape of the review, every confirmed finding with what the current code does
+about it, the one claim the verifier rejected, and the minor findings with their status. Line
+numbers the agents cite refer to the code as it was at review time. The resolution column names
+symbols in the code as it is now.
 
 ## Review design
 
 | Element | Detail |
 |---|---|
 | Lenses | Six: file-operation safety and undo; event handling, focus and windows; idle behaviour, resources and leaks; restoration, crash safety and settings; layout and model correctness; integration of the thumbnail, Finder-automation and iCloud-status modules |
-| Shared context | Product constraints restated verbatim to every agent: never modify user files except as an explicit action Finder would perform the same way; never trigger cloud downloads of dataless files; near-zero idle work; no subprocesses; only Desktop-folder and Finder-Automation permissions; restore the desktop setting on disable, quit and after crashes; bounded memory; public APIs, with any undocumented reliance flagged |
+| Shared context | My product rules, restated word for word to every agent: never change a file except as an explicit action Finder would perform the same way; never trigger cloud downloads of dataless files; near-zero idle work; no subprocesses; only Desktop-folder and Finder-Automation permissions; restore the desktop setting on disable, quit and after crashes; bounded memory; public APIs, with any undocumented reliance flagged |
 | Reviewer prompt | The shared context plus a per-lens hunt list (for example "undo that restores the wrong thing", "non-activating NSPanel becoming key vs Finder activation ordering", "comparator inconsistency (non-strict weak ordering crashes in sort)"). Output forced through a schema: file, line, severity (blocker / major / minor), summary, concrete failure scenario, suggested fix. "Report only real defects with a concrete failure scenario; skip style nits." |
 | Verifier prompt | "You are a SKEPTICAL VERIFIER. A reviewer claims the following defect. Read the actual code and decide whether it is real, with a concrete reproduction argument; default to real=false if you cannot show the failure from the code. Do not fix anything." Output schema: real, severity (may differ from the reviewer's), note, fix |
 | What was verified | Every blocker and major claim (up to 12 per lens), one verifier per claim, in parallel. Minor claims were passed through unverified and are marked as such below |
-| Not allowed | Live runs (`--test-seconds` without `--no-hide`, opening the .app), changing preferences, modifying `~/Desktop`, git |
+| Not allowed | Live runs (`--test-seconds` without `--no-hide`, opening the .app), changing my settings, modifying my Desktop folder, git |
 | Model | All 22 agents ran on the same model (`claude-fable-5-1`) |
 
 ```mermaid
@@ -49,14 +58,16 @@ flowchart LR
 | layout-model | 8 | 4 | 4 | 0 | 4 |
 | modules-integration | 8 | 3 | 3 | 0 | 5 |
 
-Reviewers took 8 to 21 minutes each; verifiers 2 to 9 minutes each. Verifiers wrote scratch programs
-where the code alone was not conclusive: a `didSet` reproduction, a run-loop undo test, a re-entrancy
-harness, a copy-into-self test, a standalone non-activating panel, and an Objective-C runtime probe.
+Reviewers took 8 to 21 minutes each, verifiers 2 to 9 minutes each. The verifiers did more than read.
+Where the code alone was not conclusive they wrote throwaway programs to settle the question: a
+`didSet` reproduction, a run-loop undo test, a re-entrancy harness, a copy-into-self test, a
+standalone non-activating panel, and an Objective-C runtime probe.
 
 ## Confirmed findings
 
-Severity is shown as reviewer → verifier where they differed. The resolution column was checked
-against the current sources under `Sources/QuietDesk/`.
+These are the fifteen problems that survived the verifiers. Each row says what could have gone wrong
+for you and where it stands now. Severity is shown as reviewer → verifier where the two disagreed. I
+checked every resolution against the current sources under `Sources/QuietDesk/`.
 
 | # | Lens | Severity | File | What could go wrong | Resolution in current code |
 |---|---|---|---|---|---|
@@ -68,7 +79,7 @@ against the current sources under `Sources/QuietDesk/`.
 | 6 | events-focus | major → minor | DesktopView.swift | A failed rename showed two stacked alerts: the alert made the panel resign key, and the resign observer re-entered `commitRename` with the same bad name. | Fixed: `committingRename` re-entrancy flag around the alert. |
 | 7 | restore-safety | major | AppDelegate.swift | If Desktop folder access was denied, `enable()` still wrote the hide key and drew an empty desktop with no message, repeating on every launch. | Fixed: `DesktopModel.listingFailed` distinguishes "empty" from "failed"; `enable()` stops the controller, resets `enabled`, shows an alert pointing at Privacy & Security, and never writes the hide key. |
 | 8 | restore-safety | major | OverlayController.swift | "Desktop Items › Hidden" ordered out the shield windows too, so one wallpaper click reached macOS's click-catcher and re-showed Finder's native icons and labels. | Fixed: `hide()` orders out only the icon windows and keeps the shields front; `rebuildWindows` honours the same state. There is no separate inert mode: the shield still owns clicks, menus and drops while hidden. |
-| 9 | layout-model | blocker | DesktopView.swift | `cells.didSet` applied the old selection indices to the new array: a relayout with fewer cells trapped (overlay dies with the native desktop still hidden), otherwise the highlight silently moved to whatever item now sat at that index, so the next ⌘⌫ could trash a file the user never chose. | Fixed: `willSet` captures the old selection's URLs (`keptSelection`) and `didSet` re-selects by URL. `focusIndex` is still dropped on relayout rather than mapped through its URL. |
+| 9 | layout-model | blocker | DesktopView.swift | `cells.didSet` applied the old selection indices to the new array: a relayout with fewer cells trapped (overlay dies with the native desktop still hidden), otherwise the highlight silently moved to whatever item now sat at that index, so the next ⌘⌫ could trash a file you never chose. | Fixed: `willSet` captures the old selection's URLs (`keptSelection`) and `didSet` re-selects by URL. `focusIndex` is still dropped on relayout rather than mapped through its URL. |
 | 10 | layout-model | major | Layout.swift | `Layout.compute` stopped once every display's cells were used, so on a full desktop the remaining items were not drawn, selectable or reachable (harness: 556 entries on 546 cells, 10 dropped; a 13-inch display at Finder defaults holds about 70). | Fixed: an overflow pass wraps onto the main display with a growing 14 pt offset; `--self-test` asserts that capacity + 25 entries are all placed and on screen. |
 | 11 | layout-model | major | Layout.swift | `slot(for:)` floored the row but rounded the column, so a drop 1 pt above a row centre snapped a full row up while 60 pt below stayed put. | Fixed: both axes use `.rounded()`; `--self-test` checks that a 3 pt nudge lands in the same slot. |
 | 12 | layout-model | major | Layout.swift | A Finder position outside every display fell back to screen 0 unclamped, creating invisible cells that ⌘A and arrow keys could still act on; the verifier also found a `CGRect.null` window frame that throws at enable. | Fixed in part: a position outside every display is now treated as unplaced and takes a free slot (`--self-test` covers it). A point inside a display but under the menu bar is still used as-is, and `windowRegion` has no null-rect guard. |
@@ -78,11 +89,14 @@ against the current sources under `Sources/QuietDesk/`.
 
 ### Where the verifier changed or narrowed a confirmed claim
 
+The skeptics were not only there to say yes or no. Several of them corrected the reviewer while
+keeping the finding, and those corrections are what shaped the fix I ended up asking for.
+
 | # | Reviewer said | Verifier found |
 |---|---|---|
-| 5 | Key focus is lost "~100 ms later"; fix by re-asserting key after `NSWorkspace.didActivateApplicationNotification`. | The resign arrives about 1 ms after `activate()`. The reviewer's proposed fix does not work: the notification was delivered before the window server's resign reached the panel, and `makeKey()` on a still-key window is a no-op. Re-asserting from the resign notification does stick. Side observation, not fully verified: `orderFrontRegardless()` at enable may itself take focus from the user's app. |
+| 5 | Key focus is lost "~100 ms later"; fix by re-asserting key after `NSWorkspace.didActivateApplicationNotification`. | The resign arrives about 1 ms after `activate()`. The reviewer's proposed fix does not work: the notification was delivered before the window server's resign reached the panel, and `makeKey()` on a still-key window is a no-op. Re-asserting from the resign notification does stick. Side observation, not fully verified: `orderFrontRegardless()` at enable may itself take focus from whatever app you were using. |
 | 6 | Major. | Minor: deterministic and user-visible, but bounded to exactly two alerts, no data touched, fully recoverable. |
-| 7 | The overlay never recovers even if access is granted later. | Partial mitigation the claim overlooked: Reload Desktop, sort changes and mount events rerun the scan, so recovery without relaunch was possible; nothing told the user to try. |
+| 7 | The overlay never recovers even if access is granted later. | Partial mitigation the claim overlooked: Reload Desktop, sort changes and mount events rerun the scan, so recovery without relaunch was possible; nothing told you to try. |
 | 8 | Wallpaper drops go to WindowManager instead of `~/Desktop`. | Where drops land in Hidden mode could not be shown from the code; that part was left unverified. |
 | 12 | Off-screen cells are invisible but actionable. | Confirmed, and an additional crash was found while verifying: a screen whose every cell is off-screen makes `windowRegion` return `CGRect.null`, which `NSPanel(frame:)` rejects. |
 | 13 | `positionsRequested` prevents a re-read after the write. | Imprecise: the flag is reset on completion. The real gap was that no re-read was ever issued after a write. |
@@ -90,9 +104,13 @@ against the current sources under `Sources/QuietDesk/`.
 
 ## The rejected claim
 
+One claim out of the sixteen that were verified did not survive, and it is one of the most useful
+results on this page, because it is the one that saved me a rewrite I did not need.
+
 The idle-resources reviewer claimed that `QLPreviewPanel` keeps non-zeroing (`assign`) `dataSource`
 and `delegate` pointers to the `DesktopView`, so `stop()` and `rebuildWindows()` would free the view
-and leave an open Quick Look panel with dangling pointers.
+and leave an open Quick Look panel with dangling pointers. In plain words: the claim was that closing
+the overlay while a preview window was open could crash the app.
 
 The verifier's note, condensed: the SDK header does declare both properties as `assign`, but the
 QuickLookUI implementation retains them. This was checked two ways on macOS 26.6.2: (1) the
@@ -105,16 +123,19 @@ calls `endPreviewPanelControl`, which nils the pointers before the release. Conc
 `EXC_BAD_ACCESS` is reachable from the code. Residual, not the claimed defect: after `stop()` the
 panel stays open controlled by a detached view (stale item list, close animation to the wrong spot),
 bounded and transient. Caveat recorded by the verifier: this is an implementation detail contrary to
-the header contract, verified only on the project's sole tested OS version
+the header contract, verified only on the one macOS version I have tested on
 ([QLPreviewPanel](https://developer.apple.com/documentation/quartz/qlpreviewpanel)).
 
-The current code still clears the pointers in `DesktopView.deinit` when it is the panel's data
-source, which costs nothing and removes the dependence on the implementation detail.
+I decided to keep the safety belt anyway. The code still clears the pointers in `DesktopView.deinit`
+when it is the panel's data source. That costs nothing, and it means QuietDesk no longer depends on an
+Apple implementation detail that could change in a later macOS.
 
 ## Minor findings
 
-Minor claims were not verified by a second agent. Status was checked against the current code and
-the README. Several were raised independently under more than one lens; duplicates are marked.
+These are the small ones. No second agent checked them, so treat each as one reviewer's opinion
+rather than a proven defect. I went through the current code and the README myself to give each one
+a status.
+Several were raised under more than one lens by different reviewers, and those duplicates are marked.
 
 | Lens | Finding | Status |
 |---|---|---|
@@ -155,29 +176,34 @@ the README. Several were raised independently under more than one lens; duplicat
 Tally of the 33 minors: 24 fixed (including 5 duplicates of other rows), 4 accepted and documented,
 3 partly fixed, 1 mostly fixed, 1 open.
 
-## What the review caught that testing would have missed
+## What the review caught that my own testing would have missed
+
+This is the part I care about most. I had been using the app on my own Mac for the whole build, and
+none of the following would have turned up that way.
 
 - **A latent crash with the native desktop hidden.** The `cells.didSet` trap (#9) fires only when a
   relayout shrinks the cell count while the highest selected index is gone, for example ⌘A then ⌘⌫.
-  The author's desktop, the self-test (30 entries, no live selection) and every manual run had missed
-  it; the verifier reproduced the `Index out of range` trap in an optimised scratch build.
-- **A destructive file-system path.** Copying `~/Desktop` into itself (#1) could only have been
-  discovered by doing it, on a cloud-synced Desktop. The reviewer, and then the
-  verifier independently, reproduced `copyItem` recursing 455 and 453 levels deep on throwaway
-  directories instead.
-- **Timing bugs across the async boundary.** Undo registered after completion (#3) and the
-  ~1 ms focus loss after Finder activation (#5) need specific timing to observe; manual testing would
-  have shown "sometimes ⌘Z does the wrong thing" and "sometimes keys go nowhere" without the cause.
-  Both verifiers built minimal harnesses, and one showed that the reviewer's own proposed fix would
-  not have worked.
-- **Gaps invisible on the calibration machine.** Overflow dropping (#10) never triggers with 89
-  entries in 260 cells; stale Finder positions (#14) only appear when a sorted desktop is switched to
-  manual; the split preferences domain was found from a leftover plist that a bare-binary test run had
-  written. Each is a real-world configuration the single development machine does not exercise.
-- **A plausible claim that was wrong.** The dangling-pointer claim matched the SDK header and would
-  have prompted a defensive rewrite; checking the runtime instead showed the object is retained.
-  The default-false verifier is what kept a non-bug out of the fix list.
+  My own desktop, the self-test (30 entries, no live selection) and every run I did by hand had
+  missed it. The verifier reproduced the `Index out of range` trap in an optimised scratch build.
+- **A path through the code that could have destroyed files.** Copying the Desktop folder into
+  itself (#1) could only have been found by doing it, on a cloud-synced Desktop, and I was never
+  going to try that on my own machine. The reviewer, and then the verifier independently, reproduced
+  `copyItem` recursing 455 and 453 levels deep on throwaway directories instead.
+- **Timing bugs that only show up sometimes.** Undo registered only after the background work had
+  finished (#3), and the roughly 1 ms focus loss after Finder activation (#5), both need particular
+  timing to show up at all. Testing by hand would have told me "sometimes ⌘Z does the wrong thing"
+  and "sometimes keys go nowhere" without ever telling me why. Both verifiers built small
+  harnesses, and one of them showed that the reviewer's own proposed fix would not have worked.
+- **Gaps my one Mac cannot show.** Overflow dropping (#10) never triggers with 89 entries in 260
+  cells, which is about the size of my own desktop. Stale Finder positions (#14) only appear when a
+  sorted desktop is switched to manual. The split preferences domain was found from a leftover
+  settings file that a bare-binary test run had written. Each of those is a real setup that my own
+  machine never puts the app in.
+- **A believable claim that was simply wrong.** The dangling-pointer claim matched Apple's own header
+  file and would have sent me into a defensive rewrite. Checking the runtime instead showed the object
+  is retained. A verifier who starts from "this is probably not real" is what kept a non-bug off my
+  fix list.
 
-Related: [FEASIBILITY.md](../FEASIBILITY.md) for the mechanism and experiments the reviewers were
-told to read first, and [VALIDATION-CHECKLIST.md](../VALIDATION-CHECKLIST.md) for the manual checks
-that remain.
+Related: [FEASIBILITY.md](../FEASIBILITY.md) for the mechanism and the experiments I told the
+reviewers to read first, and [VALIDATION-CHECKLIST.md](../VALIDATION-CHECKLIST.md) for the checks I
+still do by hand.

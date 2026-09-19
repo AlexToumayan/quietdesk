@@ -1,8 +1,11 @@
 # The brief
 
-This is the product brief the project started from, reproduced verbatim (it was written by the
-project owner as the opening prompt of an AI-assisted build session). Everything else in this
-repository is an answer to it. See [CASE-STUDY.md](CASE-STUDY.md) for how it was carried out.
+This is the brief I wrote for QuietDesk, reproduced word for word. I wrote it in one go, as the opening
+prompt of a build session in which I directed an AI, Claude. Nothing below has been tidied up or edited
+after the fact, including the parts I would phrase differently now. Everything else in this repository is
+an answer to it. See [CASE-STUDY.md](CASE-STUDY.md) for how the work actually went.
+
+The brief starts after the line.
 
 ---
 

@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 1.0.0 (2026-09-19)
+
+The first version I call finished. Everything since 0.9.1, in plain words: the desktop can be packed
+more densely when names are hidden, clicking the wallpaper reveals the desktop again, clicks and
+double-clicks behave through every settings change, the settings panel looks like Finder's, and the
+whole thing is covered by an automated test that clicks its way through the real windows.
+
 
 - Reveal desktop works while QuietDesk is on: a plain click on the wallpaper slides the windows
   aside (when System Settings has "Click wallpaper to reveal desktop" on), and for any reveal,
@@ -10,13 +16,28 @@
   window list once a second (about 1 ms). The wallpaper click uses a private Dock entry point that
   fails safe. Experiment E14 in FEASIBILITY.md.
 - Fixed: clicking the wallpaper to reveal the desktop worked once and then stopped for the rest of
-  the session. A reveal the person ended quickly looked to QuietDesk like a reveal that never
+  the session. A reveal you ended quickly looked to QuietDesk like a reveal that never
   happened, so it stopped asking for one. A request is now judged by whether a reveal was seen at
   all, and seeing any reveal later turns the click back on. Two clicks in quick succession cancel
   each other out, so neither of them is taken as proof that reveals do not work. The end of a reveal
   is also confirmed by a second read of the window list a moment later, so the icons no longer come
   back for an instant and vanish again while the windows are still sliding into place. Checks that
-  were queued up stay quiet while the displays sleep and on a QuietDesk that has been turned off.
+  were queued up stay quiet on a QuietDesk that has been turned off.
+- Fixed: after the Mac had slept, QuietDesk could stop noticing reveals for the rest of the session.
+  Every reveal then showed two sets of icons, QuietDesk's on top of Finder's. The check that reads
+  the window list used to pause when the displays slept and start again on the wake notification. If
+  that notification did not arrive, and after a long sleep with the lid shut it does not always, the
+  check never came back. It no longer pauses at all. A sleeping Mac runs no timers anyway, so the
+  pause saved about a millisecond a second at most, and it cost the whole feature. The check also
+  puts itself back whenever you click the desktop or the Mac wakes, and the quick looks that follow
+  a wallpaper click no longer depend on it. The debug log now records every time the check starts
+  and every wake. Switching to another account and back, or coming past the lock screen, reads the
+  desktop again straight away, so nothing lingers from a moment when nothing of yours was on screen.
+- Fixed: a wallpaper click that the Mac slept through could switch the click-to-reveal off for the
+  rest of the session. QuietDesk looks back about a second after a click to see whether the reveal
+  it asked for appeared. That look waits on a clock that stops while the Mac sleeps, so a sleep
+  right after the click held it until the Mac woke, and it then judged a desktop an hour older than
+  the click. It now knows when it is running late and says nothing in that case.
 - The View Options panel is laid out on first use instead of at launch (about 7 MB less at rest).
 - View Options panel follows Finder's: left-aligned sections between full-width rules, small and
   large document glyphs around the icon-size slider, 2×2 and 3×3 grid glyphs around grid spacing,
@@ -58,7 +79,7 @@
 - Documentation: figures for measurements, review outcomes, research verification, grid
   calibration, workflow sizes and the window-level stack (`scripts/make-charts.py`).
 
-## 0.9.1 — 2026-09-17
+## 0.9.1 (2026-09-17)
 
 - New app icon (slashed eye, matching the menu-bar icon); menu-bar icon shows an open eye while off.
 - Menu: "Turn QuietDesk On/Off" at the top; "Quit QuietDesk" kept separate; "Show View Options…".
@@ -70,7 +91,7 @@
   calibrated at two spacing settings (tight grids match).
 - "Show item info" (item counts, sizes, free space) and label-on-the-right layouts.
 
-## 0.9.0 — 2026-09-17
+## 0.9.0 (2026-09-17)
 
 First public build. Feature-complete desktop layer; hands-on validation still in progress
 (see docs/VALIDATION-CHECKLIST.md).

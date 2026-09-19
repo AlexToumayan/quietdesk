@@ -42,7 +42,7 @@ def glance():
     tiles = [
         ("+0.05 s", "CPU time added, 50 s idle", "one 1 ms window check per second"),
         ("84 MB", "resident memory, stable", "±0.2 MB across the run"),
-        ("594 / 594", "automated checks passing", "17 XCTest + 43 self-test + 534 scenario"),
+        ("643 / 643", "automated checks passing", "17 XCTest + 43 self-test + 583 scenario"),
         ("41 caught", "problems found by adversarial review", "three reviews, each problem listed with its fix"),
     ]
     b = [text(20, 30, "QuietDesk: results at a glance", 16, INK, weight="600")]
@@ -177,7 +177,7 @@ def workflows():
             b.append(text(x0 + 180 + v * scale + 8, y + 15, fmt(v), 12, INK))
     panel(20, "Agents", 1, BLUE, lambda v: str(v), 5)
     panel(500, "Tokens (millions)", 2, ORANGE, lambda v: f"{v:.2f} M", 50)
-    b.append(text(20, H - 15, "Agents include the verifiers. The lead agent's own work is not counted. Source: docs/CASE-STUDY.md §6.", 12, INK2))
+    b.append(text(20, H - 15, "Agents include the verifiers. The main Claude session's own work is not counted. Source: docs/CASE-STUDY.md §6.", 12, INK2))
     write("workflows.svg", svg(W, H, "".join(b)))
 
 # 7. Window layers diagram ------------------------------------------------------------------

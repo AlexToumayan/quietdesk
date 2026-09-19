@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 enum LabelMode: String, CaseIterable {
@@ -132,15 +133,63 @@ struct ViewOptions: Equatable {
 /// Plain UserDefaults persistence for the user-facing controls.
 final class Settings {
     static let shared = Settings()
+    /// A scenario-test run's own preferences domain; nil in every other mode. The scenario test
+    /// writes sortKey, stacksMode, viewOptions and labelMode while it runs, so two runs sharing one
+    /// domain overwrite each other through cfprefsd and rounds fail at random. The process id makes
+    /// the domain private to this run; `removeScenarioSuite()` takes it away again at the end.
+    static let scenarioSuite: String? = scenarioSuiteBase.map { "\($0).\(ProcessInfo.processInfo.processIdentifier)" }
+    /// The name the per-process domains of this kind of run are built on; nil outside a scenario run.
+    private static let scenarioSuiteBase: String? = {
+        let args = CommandLine.arguments
+        guard args.contains("--scenario-test") else { return nil }
+        // With no --defaults-suite, still a private name: never the person's own settings domain.
+        return args.firstIndex(of: "--defaults-suite").flatMap { $0 + 1 < args.count ? args[$0 + 1] : nil } ?? "dev.quietdesk.scenario"
+    }()
     /// One preferences domain for the bundle and the bare developer executable.
     static let defaults: UserDefaults = {
         // Tests run against a private suite so they never touch the person's own settings.
+        if let suite = scenarioSuite, let d = UserDefaults(suiteName: suite) { return d }
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--defaults-suite"), i + 1 < args.count, let d = UserDefaults(suiteName: args[i + 1]) { return d }
         // Inside the bundle this IS the standard domain; the bare executable (no bundle id) uses the same one.
         if Bundle.main.bundleIdentifier == "dev.quietdesk.QuietDesk" { return .standard }
         return UserDefaults(suiteName: "dev.quietdesk.QuietDesk") ?? .standard
     }()
+    /// Throws away a scenario-test run's private domain, so no plist is left behind in
+    /// ~/Library/Preferences. Does nothing in any other mode.
+    static func removeScenarioSuite() {
+        guard let suite = scenarioSuite else { return }
+        defaults.removePersistentDomain(forName: suite)
+        UserDefaults.standard.removePersistentDomain(forName: suite)
+        defaults.synchronize()   // let the daemon write the emptied domain out before the file goes
+        // Emptying a domain still leaves an empty plist behind, so take the file too.
+        for library in FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask) {
+            try? FileManager.default.removeItem(at: library.appendingPathComponent("Preferences/\(suite).plist"))
+        }
+    }
+
+    /// Clears out the per-process domains left by earlier runs of this kind. Deleting the file at
+    /// the end cannot always win: the preferences daemon may write the emptied domain back out
+    /// after the process has gone, leaving an empty plist. Sweeping at the start keeps the pile
+    /// bounded instead, and only takes files whose process id belongs to nothing that is running.
+    /// Does nothing outside a scenario run.
+    static func sweepStaleScenarioSuites() {
+        guard let base = scenarioSuiteBase else { return }
+        let fm = FileManager.default
+        let me = ProcessInfo.processInfo.processIdentifier
+        for library in fm.urls(for: .libraryDirectory, in: .userDomainMask) {
+            let prefs = library.appendingPathComponent("Preferences")
+            guard let names = try? fm.contentsOfDirectory(atPath: prefs.path) else { continue }
+            for name in names where name.hasPrefix("\(base).") && name.hasSuffix(".plist") {
+                let digits = String(name.dropFirst(base.count + 1).dropLast(6))
+                guard !digits.isEmpty, digits.allSatisfy({ $0.isASCII && $0.isNumber }),
+                      let pid = pid_t(digits), pid > 0, pid != me else { continue }
+                // Alive (or alive and not ours, which reports EPERM): that run still needs it.
+                if kill(pid, 0) == 0 || errno == EPERM { continue }
+                try? fm.removeItem(at: prefs.appendingPathComponent(name))
+            }
+        }
+    }
     private let defaults: UserDefaults
     /// The app only ever uses `shared`; tests pass a throwaway suite.
     init(defaults: UserDefaults = Settings.defaults) { self.defaults = defaults }

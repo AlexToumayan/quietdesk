@@ -115,18 +115,22 @@ final class OverlayController: DesktopSurfaceDelegate {
             self.views.forEach { $0.clearHover() }
         })
         watching = true
-        scheduleRevealCheck(every: 1.0)
+        scheduleRevealCheck(every: 1.0, reason: "watching started")
         checkReveal()                               // enabled in the middle of a reveal: start out of the way
-        // No reveal can start while the displays sleep or the session is switched out: no checks then.
-        for name in [NSWorkspace.screensDidSleepNotification, NSWorkspace.sessionDidResignActiveNotification] {
+        // The check runs for as long as QuietDesk is on. A sleeping Mac runs no timers anyway, so
+        // stopping it while the displays sleep saved about a millisecond a second and cost the
+        // whole feature whenever the wake notification did not arrive. Coming back to the Mac is
+        // still worth a look straight away, because a reveal may have started or ended meanwhile
+        // and nothing says so: waking, and returning to this session after a switch to another
+        // account or the lock screen. While another account is in front nothing of ours is drawn,
+        // so what the check reads there cannot be seen either way; this look puts it right the
+        // moment the person is looking again.
+        for name in [NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification, NSWorkspace.sessionDidBecomeActiveNotification] {
+            let what = name == NSWorkspace.sessionDidBecomeActiveNotification ? "coming back to this session" : "system wake"
             workspaceObservers.append(wc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                self?.revealTimer?.invalidate(); self?.revealTimer = nil
-            })
-        }
-        for name in [NSWorkspace.screensDidWakeNotification, NSWorkspace.sessionDidBecomeActiveNotification] {
-            workspaceObservers.append(wc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                guard let self, self.revealTimer == nil else { return }
-                self.scheduleRevealCheck(every: self.steppedAside ? 0.25 : 1.0)
+                guard let self else { return }
+                DebugLog.log("\(what) (\(name.rawValue)): checking the desktop")
+                self.ensureRevealTimer(what)
                 self.checkReveal()
             })
         }
@@ -387,19 +391,39 @@ final class OverlayController: DesktopSurfaceDelegate {
     /// before the second one confirms the end of a reveal.
     private let revealVerdictDelay: TimeInterval = 1.2
     private let revealEndConfirmGap: TimeInterval = 0.07
-    /// True between startWatching and stop: the delayed re-checks must not restart the timer
-    /// or move windows on a controller that has been taken down.
+    /// How late that judgement may run and still mean anything. See `revealSleepProofNow`.
+    private let revealVerdictLateness: TimeInterval = 1.0
+    /// True between startWatching and stop. A controller that has been taken down is the one thing
+    /// that stops a delayed re-check, a click or a wake from reading the window list again.
     private var watching = false
 
     /// The system gives no event for a reveal starting or ending (FEASIBILITY E14), so the state
     /// is read from the window list: once a second with generous tolerance at rest (about 1 ms
     /// each), four times a second while revealed so the desktop comes back promptly.
-    private func scheduleRevealCheck(every interval: TimeInterval) {
+    private func scheduleRevealCheck(every interval: TimeInterval, reason: String) {
         revealTimer?.invalidate()
         let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in self?.checkReveal() }
         timer.tolerance = interval / 2
         RunLoop.main.add(timer, forMode: .common)
         revealTimer = timer
+        DebugLog.log("reveal check every \(interval)s (\(reason))")
+    }
+
+    /// Puts the check back if it is missing, from the places that prove somebody is at the Mac:
+    /// a click on the desktop and waking up. Detection that is off stays off for the rest of the
+    /// session and the person sees doubled icons, so nothing may be its only chance to come back.
+    /// When the check is healthy this is two comparisons and nothing else.
+    private func ensureRevealTimer(_ reason: String) {
+        guard watching, revealTimer?.isValid != true else { return }
+        scheduleRevealCheck(every: steppedAside ? 0.25 : 1.0, reason: "restarted after \(reason)")
+    }
+
+    /// Test seams for the timer itself: whether the check is running, and a way to kill it the way
+    /// a missed notification used to. `forget` also drops the controller's reference to it.
+    var revealTimerIsLive: Bool { revealTimer?.isValid ?? false }
+    func killRevealTimerForTesting(forget: Bool) {
+        revealTimer?.invalidate()
+        if forget { revealTimer = nil }
     }
 
     /// Test seam: what tells us the desktop is revealed. Tests substitute a fake so the
@@ -434,10 +458,10 @@ final class OverlayController: DesktopSurfaceDelegate {
             views.forEach { $0.finishRenameQuietly(); $0.clearHover() }
             windows.forEach { $0.orderOut(nil) }
             shields.forEach { $0.orderOut(nil) }
-            scheduleRevealCheck(every: 0.25)
+            scheduleRevealCheck(every: 0.25, reason: "revealed")
         } else {
             if visible { show() } else { shields.forEach { $0.orderFrontRegardless() } }
-            scheduleRevealCheck(every: 1.0)
+            scheduleRevealCheck(every: 1.0, reason: "reveal ended")
         }
     }
 
@@ -456,10 +480,21 @@ final class OverlayController: DesktopSurfaceDelegate {
     }
     var revealNow: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
 
-    /// Whether a delayed re-check may still act: not on a controller that has been taken down, and
-    /// not while checks are deliberately suspended (displays asleep, session switched out), where
-    /// the timer is off on purpose. A reveal in progress keeps them alive so we can come back.
-    private var revealChecksLive: Bool { watching && (revealTimer != nil || steppedAside) }
+    /// A second clock, for the one delayed block that decides something. The queue those blocks
+    /// wait on, and `revealNow` with them, both stop while the Mac sleeps. So a sleep between a
+    /// wallpaper click and its judgement holds all four blocks until the Mac wakes, and then runs
+    /// them at once, an hour after the reveal they were meant to look at. "No reveal was seen"
+    /// means nothing by then, and acting on it would switch wallpaper-click reveal off for the
+    /// rest of the session. This clock keeps counting through sleep (CLOCK_UPTIME_RAW, which is
+    /// what systemUptime reads, does not), so the judgement can tell that it is too late to judge.
+    var revealSleepProofNow: () -> TimeInterval = {
+        TimeInterval(clock_gettime_nsec_np(CLOCK_MONOTONIC)) / 1_000_000_000
+    }
+
+    /// Whether a delayed re-check may still act. One thing only can stop it: a controller that has
+    /// been taken down. These checks are what notices the reveal a click just asked for, so the
+    /// state of the timer must never silence them.
+    private var revealChecksLive: Bool { watching }
 
     private func checkRevealIfWatching() {
         guard revealChecksLive else { return }
@@ -468,6 +503,7 @@ final class OverlayController: DesktopSurfaceDelegate {
 
     func surfaceWallpaperClicked() {
         wallpaperClicks += 1
+        ensureRevealTimer("a wallpaper click")   // somebody is here: the check must be running
         guard revealOnWallpaperClick, settings.revealDesktopOnWallpaperClick, !revealUnseen, revealGestureEnabled() else { return }
         revealRequests += 1
         let requests = revealRequests
@@ -482,9 +518,16 @@ final class OverlayController: DesktopSurfaceDelegate {
         lastRevealRequestAt = now
         // The Dock needs a moment; look again shortly rather than waiting for the slow tick.
         for delay in [0.15, 0.35, 0.7] { revealAfter(delay) { [weak self] in self?.checkRevealIfWatching() } }
+        let judgeBefore = revealSleepProofNow() + revealVerdictDelay + revealVerdictLateness
         revealAfter(revealVerdictDelay) { [weak self] in
             guard let self, self.revealChecksLive else { return }
             self.checkReveal()
+            // A sleep can hold this block until the Mac wakes. Reading the window list again is
+            // still worth doing, but a judgement made that late would be about the wrong moment.
+            guard self.revealSleepProofNow() <= judgeBefore else {
+                DebugLog.log("reveal verdict skipped: it ran long after the click (the Mac slept in between)")
+                return
+            }
             // Only when no reveal at all was seen since this click, and nothing is being revealed
             // now, and no other click asked around the same time (which makes the state ambiguous).
             guard !overlapped, self.revealsObserved == seen, !self.steppedAside, self.revealRequests == requests else { return }
@@ -504,6 +547,7 @@ final class OverlayController: DesktopSurfaceDelegate {
     private var keyReassertObserver: NSObjectProtocol?
 
     func surfaceDidReceiveClick() {
+        ensureRevealTimer("a desktop click")     // somebody is here: the check must be running
         DebugLog.log("surfaceDidReceiveClick bringFinderForward=\(settings.activateFinderOnDesktopClick) active=\(NSApp.isActive) front=\(NSWorkspace.shared.frontmostApplication?.localizedName ?? "?") key=\(windows.first(where: { $0.isKeyWindow })?.windowNumber ?? 0)")
         guard settings.activateFinderOnDesktopClick else { NSApp.activate(ignoringOtherApps: true); return }
         guard let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first, !finder.isActive,

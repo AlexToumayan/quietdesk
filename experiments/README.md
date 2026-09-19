@@ -1,18 +1,31 @@
 # Experiments
 
-**In plain words.** These are the small programs we ran on the real Mac to settle questions that documentation could not answer: does this setting really hide the icons, which window gets a click on a transparent pixel, will Finder accept tiny label text, where does Finder think the icons are. Each one is reversible and touches the live desktop for a few seconds at most; each section says what question it answers, how to run it, what it changes, and what happened on macOS 26.6.2. The ideas behind them are explained in [../docs/CONCEPTS.md](../docs/CONCEPTS.md).
+**In plain words.** An experiment here is a tiny throwaway program run on my own Mac to settle a question
+that no documentation could answer. Does this setting really hide the icons? When the pixel under the
+pointer is transparent, which window gets the click? Will Finder accept tiny label text? Where does Finder
+think the icons are? I could not find those answers written down anywhere, so I had Claude, the AI I
+directed through this build, write one small program per question, and I watched the answers come back on
+my own Mac. Every program is reversible, and the ones that change anything touch my live desktop for a few
+seconds at most. Each section below says what question it answers, how to run it, what it changes, and what
+happened when it ran. The ideas behind all of this are explained in [../docs/CONCEPTS.md](../docs/CONCEPTS.md).
 
-The scripts in this directory are the throwaway probes that produced the measurements in
-[docs/FEASIBILITY.md](../docs/FEASIBILITY.md), sections 3 and 4 (experiments E1 to E15). They were written
-during the QuietDesk build session, one per question, and are kept so that every claim in the feasibility
-document can be re-run. None of them is part of the app. Each one is reversible; the ones that touch the
-live desktop do so for a few seconds and put it back. Results below are what was observed on the session
-machine: macOS 26.6.2, Finder 26.4, Apple Silicon, Command Line Tools with Swift 6.1 and the
-macOS 15.4 SDK, two displays (built-in 1728x1117 pt @2x with a 33 pt menu bar; external 1920x1080 @1x
-placed above it), desktop sorted by Date Added with Stacks on, icon size 36, text size 12, grid spacing 26,
-148 items, iCloud Desktop sync on.
+These scripts are what produced the measurements in
+[docs/FEASIBILITY.md](../docs/FEASIBILITY.md), sections 3 and 4 (experiments E1 to E15). Claude wrote them
+during the QuietDesk build session, one per question. I approved each one before it ran, and I kept them so
+that every claim in the feasibility document can be re-run, by me or by anyone else. None of them is part of
+the app. Each one is reversible; the ones that touch the live desktop do so for a few seconds and put it
+back.
+
+The results below are what happened on my Mac, so here is what my Mac was at the time: macOS 26.6.2,
+Finder 26.4, Apple Silicon, Command Line Tools with Swift 6.1 and the macOS 15.4 SDK, two displays (the
+built-in one 1728x1117 pt at 2x with a 33 pt menu bar, an external one 1920x1080 at 1x placed above it),
+desktop sorted by Date Added with Stacks on, icon size 36, text size 12, grid spacing 26, 148 items,
+iCloud Desktop sync on. A Mac set up differently can give different numbers.
 
 ## Index
+
+The last column is the one to read first: it says whether running that script will do anything visible to
+your desktop.
 
 | Script | Experiment | Question it answers | Touches the live desktop |
 |---|---|---|---|
@@ -33,11 +46,17 @@ Experiments E7, E9, E10, E12 and E15 (layout reproduction, resource use, the pan
 
 ## Conventions
 
+These are the fixed values and habits every script below shares, gathered in one place so that each section
+does not have to repeat them. Two words come up throughout. A *hit test* is asking macOS which window a
+click at a given point would land on. *Alpha* is how solid a pixel is, written below either as a fraction
+of 1 (alpha 0.9) or out of 255 (alpha 1/255); 0 is fully transparent. A window's *level* is the numbered
+layer it sits in, and the desktop levels are large negative numbers because they sit behind everything.
+
 | Fact | Value | Where it comes from |
 |---|---|---|
 | `kCGDesktopWindowLevel` | -2147483623 | SDK header `CGWindowLevel.h`; printed by probe.swift |
 | `kCGDesktopIconWindowLevel` | -2147483603 | Same; Finder's desktop windows were measured at this level (E1) |
-| QuietDesk's overlay levels | shield -2147483602 (icon level + 1), icon window -2147483601 (icon level + 2) | E8, E10; the icon window moved to + 2 later (CHANGELOG, Unreleased) |
+| QuietDesk's overlay levels | shield -2147483602 (icon level + 1), icon window -2147483601 (icon level + 2) | E8, E10; the icon window moved to + 2 later (CHANGELOG) |
 | `CGWindowListCopyWindowInfo` bounds | Global top-left origin, y down; the external display above the built-in one reports `-103,-1080 1920x1080` | probe output |
 | `NSScreen` / `NSWindow` points | Bottom-left origin, y up; hovertest converts with `screen.frame.height - y` | AppKit |
 | Building a Swift probe | `swiftc -O -o NAME NAME.swift` (no Xcode needed) | the six original probes compile with no warnings on Swift 6.1; the three reveal scripts are run with `swift NAME.swift` |
@@ -62,7 +81,7 @@ external display at scale 1 (1920x1080 pt, frame origin y = 1117, i.e. above the
 on-screen list at and just above the desktop-icon level contained only Dock, Wallpaper and Window Server
 windows: no Finder window was reported on screen at that moment. That gap is why probe2.swift (all windows,
 on or off screen) was written next; Finder's two desktop windows appear there. Window names are absent
-without Screen Recording, which the experiments never requested. Permissions, as recorded in the session
+without Screen Recording, which these experiments never asked for. Permissions, as recorded in the build
 log (they are not in the feasibility document): `AXIsProcessTrusted` false, `CGPreflightScreenCaptureAccess`
 false, Automation → Finder status -1744 (would prompt). For a bare executable macOS attributes these to the
 parent terminal process.
@@ -134,10 +153,11 @@ square when the script asks (twice, 5 s each). Total run time 16 s; the process 
 
 **What it changes.** Shows a full-screen transparent window on the main display with a red 120x120 pt
 square at (200, 500) pt from the top-left corner, labelled "QuietDesk test", for 16 s. Warps the cursor between the square and a
-clear area four times per phase and returns it to its original position. Nothing persists. Two literals are
-tied to the session machine: the clear test point `(600, 560)` assumes no icon there (on the session desktop
+clear area four times per phase and returns it to its original position. Nothing persists. Two numbers in
+the script are tied to my Mac: the clear test point `(600, 560)` assumes no icon sits there (on my desktop
 the grid fills from the top-right), and phase 3 calls `order(.above, relativeTo: 61)`, where 61 was the
-window number of Finder's built-in-display desktop window; read the current number from `lowwin` first.
+window number of Finder's built-in-display desktop window. Read the current number from `lowwin` before you
+run it; it will not be 61 on your Mac.
 
 **Result on 26.6.2 (E4).**
 
@@ -148,7 +168,7 @@ window number of Finder's built-in-display desktop window; read the current numb
 | Hit test, fully transparent point | Returns Finder's desktop window (the test window is skipped) |
 | Tracking with `ignoresMouseEvents = true` | Enter/exit still fired on the cursor warps (`entered=1 exited=1` in both warp phases) |
 | `mouseMoved` and the global monitor | Counted 0 in every phase: the warps produced no mouse-moved events, and no mouse movement was recorded during the two "move the mouse" phases either (`entered=0 exited=0 moved=0`) |
-| Phase 3: `ignoresMouseEvents = false`, then `order(.above, relativeTo: 61)` | Recorded as `inside-square -> window 61`, i.e. the hit test at the opaque point returned Finder's desktop window, not the test window. The feasibility document does not use this phase, and the session did not analyse it further; it is listed here because it was observed |
+| Phase 3: `ignoresMouseEvents = false`, then `order(.above, relativeTo: 61)` | Recorded as `inside-square -> window 61`, i.e. the hit test at the opaque point returned Finder's desktop window, not the test window. The feasibility document does not use this phase, and I did not chase it any further. It is listed here because it was observed |
 
 The tracking row is what made "hover on a click-through window" plausible; the transparent-point row is the
 documented hit-testing rule for windows with transparency at the point.
@@ -197,11 +217,11 @@ app's first panel version set them the other way round and spent a 12 s run abov
 (E10) before the order was fixed and the `level` setter guarded.
 
 **Result on 26.6.2 (E11).** With `ignoresMouseEvents` left at its default, the panel behaves like the plain
-window: the red square and the alpha 1/255 patch hit A, a fully transparent point passes to B. The session
+window: the red square and the alpha 1/255 patch hit A, a fully transparent point passes to B. Claude
 ran this script as `./alphatest5 | head -4`, so only those three points were recorded for the panel; the
 patches from 4/255 upward were exercised but their output was not kept. The second half of E11 (setting
 `ignoresMouseEvents = false` explicitly makes the panel receive clicks everywhere in its frame, transparent
-pixels included) was measured in the app itself, not by this script; it matches the behaviour Apple
+pixels included) was measured in the app itself, not by this script. It matches the behaviour Apple
 described in the AppKit 10.3 release notes, and QuietDesk sets the property to `false` on purpose.
 
 ## positions.applescript
@@ -212,8 +232,8 @@ count, and `{name, desktop position, class}` of every item in one request.
 
 **Run.** `osascript positions.applescript`. The first run asks for Automation → Finder consent.
 
-**What it changes.** Nothing; it only reads. The output lists the name of every item on the desktop, so it
-is not reproduced here.
+**What it changes.** Nothing; it only reads. The output lists the name of every item on my desktop, so I am
+not reproducing it here.
 
 **Result on 26.6.2 (E2).**
 
@@ -230,8 +250,9 @@ only while Finder's desktop is set to Sort By None or Snap to Grid.
 
 ## textsize.applescript and textsize10.applescript
 
-**Question.** Finder's View Options menu offers text sizes 10–16. Does the scripting property enforce the
-same range, or can labels be shrunk below it (a possible way to make them effectively disappear)?
+**Question.** Finder's View Options menu offers text sizes 10 to 16. Does the scripting property enforce
+the same range, or can labels be shrunk below it? If they could be shrunk far enough, that would be one way
+to make them effectively disappear.
 
 **Run.** `osascript textsize.applescript` then `osascript textsize10.applescript`.
 
@@ -268,7 +289,7 @@ undocumented by Apple; the layout follows the reverse-engineered description in
 [Mac::Finder::DSStore](https://metacpan.org/dist/Mac-Finder-DSStore/view/DSStoreFormat.pod) and the
 [ds_store](https://ds-store.readthedocs.io/en/latest/index.html) package.
 
-**Result on 26.6.2 (E5), re-run on the session copy while writing this README.**
+**Result on 26.6.2 (E5), re-run on my copy of the file while this page was being written.**
 
 | Check | Observed |
 |---|---|
@@ -276,7 +297,7 @@ undocumented by Apple; the layout follows the reverse-engineered description in
 | Records | 724 (matches the DSDB count), 148 distinct item names |
 | `Iloc` records | 58, for 148 items |
 | Other structures | `bwsp` 52, `dilc` 147, `icvp` 10, `lg1S` 87, `lsvC` 23, `lsvp` 23, `moDD` 87, `modD` 87, `ph1S` 87, `vSrn` 63 |
-| Coordinates | x on 65 + 110·k (k = 0–5), y on 46 + 126·k up to y = 6850, plus one record at (15, 15) |
+| Coordinates | x on 65 + 110·k (k = 0 to 5), y on 46 + 126·k up to y = 6850, plus one record at (15, 15) |
 | Trailing bytes | 51 records end in `ff ff ff ff ff ff 00 00`; 7 carry non-zero values in the last two bytes |
 
 The coordinates describe a left-to-right arrangement on a 110x126 pt pitch that runs far below the
@@ -303,11 +324,20 @@ notifications and for seven candidate Darwin notifications, and toggles a reveal
 
 **Result:** the trigger works with no permission; the old `Mission Control 1` command line does
 nothing on macOS 26. Finder's hidden items are re-shown for the whole reveal, however it was
-started. No notification of any kind fires, and the panel sees no occlusion change; the only
+started. No notification of any kind fires, and the panel sees no occlusion change. The only
 observable is one screen-sized Dock window per display at layer 18 while revealed (and
-WindowManager's click-catchers gone). One window-list check takes about 1 ms.
+WindowManager's click-catchers gone).
+
+This is why QuietDesk has to look rather than listen. Nothing tells it a reveal started, so it reads the
+window list and looks for that Dock window. One such check takes about 1 ms. QuietDesk runs it once a
+second for as long as it is on, and four times a second while the desktop is revealed, so that the quiet
+desktop comes back quickly when your windows do.
 
 ## Hypotheses these experiments rejected or corrected
+
+This is the part I find most useful. Most of these were ideas that sounded right, and running them on my
+own Mac is what showed they were wrong. Each rejected idea saved time that would otherwise have gone into
+building on a wrong assumption.
 
 | Hypothesis | Script | Outcome |
 |---|---|---|
@@ -322,6 +352,8 @@ WindowManager's click-catchers gone). One window-list check takes about 1 ms.
 | A non-activating `NSPanel` keeps the level it was given | alphatest5.swift, app (E10) | Corrected: `isFloatingPanel` rewrites `level`; set it first |
 
 ## Not included
+
+Things you will not find in this directory, and why:
 
 - `alphatest`, `alphatest2`, `alphatest3`: superseded attempts at E6 (see alphatest4).
 - The app-level measurements E7, E9, E10, E12 and E15: reproduce them with `scripts/measure-idle.sh 60` (E15), the app's `--self-test` mode and

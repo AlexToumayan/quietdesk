@@ -1,32 +1,37 @@
 # Feature reviews: one change, attacked before it is committed
 
-**In plain words.** Two new features, the compact grid and "reveal desktop", were each put in front of a small team of AI helpers before they were saved into the project. A few reviewers each hunted for one kind of mistake. Every mistake they reported went to two skeptics whose job was to prove the reviewer wrong. At the end one more helper, the critic, read the list and asked what everybody had missed. The two reviews turned up 26 distinct problems that the automated tests had not caught, five of them rated major. Almost all were fixed in the same commit as the feature, and the few that are still open are marked below. Ideas explained simply: [CONCEPTS.md](../CONCEPTS.md).
+**In plain words.** Before I let either of two new features into the project, I put it in front of a small team of AI helpers. The features were the compact grid and "reveal desktop". A few reviewers each hunted for one kind of mistake. Every mistake they reported went to two skeptics whose job was to prove the reviewer wrong. At the end one more helper, the critic, read the list and asked what everybody had missed. The two reviews turned up 26 distinct problems that the automated tests had not caught, five of them serious enough to be rated major. Almost all of them were fixed in the same commit as the feature, and the few that are still open are marked below. Ideas explained simply: [CONCEPTS.md](../CONCEPTS.md).
 
 **If you are five.** You build a sandcastle. Before you say "done", three friends each poke one part: the walls, the moat, the flag. When a friend shouts "broken!", two other friends go and look. They only believe it if they can see the hole themselves. Then one last friend walks round the back and asks what nobody looked at. You fix the holes, and only then do you take the photo.
 
-An adversarial review of one change is a code review aimed at a single diff, not at the whole
-codebase. Every agent is told what the change does, which facts were measured and may be treated as
-true, and which promises the product must keep. Then the reviewers are asked to break it. It was
-worth doing here for three reasons. Both changes touched assumptions that had been safe since the
-first version: where a name is drawn, and whether the app does any work at rest. The automated
-checks had flagged none of what follows. And a single diff is a small target, so each review
-finished in under half an hour. This page records the design of the two reviews, every distinct problem with what the
-current code does about it, what the skeptics threw out or corrected, and what each review taught.
-Line numbers cited by the agents refer to the code at review time. The "how it was fixed" columns
-were checked against the current sources under `Sources/QuietDesk/` and the current docs. The
-resolutions are also summarised in [CHANGELOG.md](../../CHANGELOG.md) under "Unreleased" and in the
-two commit messages.
+Reviewing one change, rather than the whole project, is the difference that makes this work. The
+target is a single diff, which is the set of lines a change adds and removes. Every agent is told
+three things: what the change does, which facts I had already measured, so they can be taken as
+true, and which promises the product must keep. Then the reviewers are asked to break it.
+
+I thought both of these changes were worth that trouble for three reasons. Each one quietly undid an
+assumption that had been safe since the first version: where a name gets drawn, and whether the app
+does any work while you are not touching it. My automated checks had flagged none of what follows.
+And a single diff is a small target, so each review finished in under half an hour.
+
+This page records how I set the two reviews up, every distinct problem with what the current code
+does about it, what the skeptics threw out or corrected, and what each review taught me. Line numbers
+the agents cite refer to the code as it was at review time. I checked the "how it was fixed" columns
+against the current sources under `Sources/QuietDesk/` and the current docs. The same resolutions are
+summarised in [CHANGELOG.md](../../CHANGELOG.md) and in the two commit messages.
 
 ## Review design
 
-Both reviews use the same three-step shape. The workflow scripts are in the repository:
-[6-review-compact-grid.js](../workflows/6-review-compact-grid.js) and
+Both reviews use the same three-step shape: reviewers look for problems, skeptics try to disprove
+each one, and a critic at the end asks what nobody looked for. Claude, the AI I was directing, wrote
+the script for each run and ran it, starting every helper from it. Both scripts are in the
+repository: [6-review-compact-grid.js](../workflows/6-review-compact-grid.js) and
 [7-review-reveal-desktop.js](../workflows/7-review-reveal-desktop.js).
 
 | Element | Detail |
 |---|---|
 | Target | One uncommitted change, read with `git diff` in `<repo>`. Not the whole codebase. |
-| Shared context | Sent word for word to every agent: what the change does, step by step, and the product rules it must not break. Examples of those rules: icons are clickable exactly where they are drawn; no timers at idle; never leave the person with no icons, or with doubled icons, for long; the private entry point must fail safe. The reveal-desktop review also listed the measured facts from experiment E14, with the instruction to treat them as true. |
+| Shared context | Sent word for word to every agent: what the change does, step by step, and my rules that it must not break. Examples of those rules: icons are clickable exactly where they are drawn; no timers at idle, meaning none while nobody is touching the Mac; never leave you with no icons, or with doubled icons, for long; the private entry point must fail safe. The reveal-desktop review also listed the measured facts from experiment E14, with the instruction to treat them as true. |
 | Lenses | One reviewer per lens. A lens is a list of named suspects, not a vague area. Compact grid: geometry and hit-testing; layout modes and state; animation, timers and redraw; tests and consistency. Reveal desktop: state machine, timers and races; detection robustness and system semantics; click semantics, cost and claims. |
 | Skeptics | Two per finding. They work independently and in parallel, and each finding goes to its skeptics as soon as its reviewer is done. |
 | Confirmation rule | A finding is confirmed when at least one skeptic says it stands and at least half of the skeptics who answered say so. With two skeptics, a finding is rejected only when both refute it. |
@@ -87,18 +92,19 @@ or to check how a window's owner name is reported for an app launched in another
 
 ## Review 1: the compact grid
 
-**The change.** The compact grid packs desktop icons as if names did not exist: no room is kept
-under an icon, and a name fades in over the row below when its item is pointed at, selected or
-focused. The same change added a third measured point to the grid calibration, so QuietDesk's cells
-match Finder's at the tightest spacing too.
+**The change.** The compact grid packs desktop icons as if names did not exist. No room is kept
+under an icon, and a name fades in over the row below when you point at that item, select it or
+reach it with the arrow keys. The same change added a third measured point to the grid calibration,
+so QuietDesk's cells match Finder's at the tightest spacing too.
 
 **The shape.** Four lenses, 21 findings, two skeptics for each finding (42), one critic: 47 agents.
 
 ### Problems found
 
-The 21 confirmed findings describe 13 distinct problems, because the lenses overlap on purpose. The
-critic added three items. One of them is the rename half of problem 2 and is folded in there, so
-the table has 15 rows. Where two lenses gave the same problem different severities, both are shown.
+The 21 confirmed findings describe 13 distinct problems, because I let the lenses overlap on purpose.
+The critic added three items. One of those is the rename half of problem 2, so I folded it in there
+and the table has 15 rows. Where two lenses gave the same problem different severities, both are
+shown.
 
 | # | Problem, in plain words | Reported by | Severity | How it was fixed |
 |---|---|---|---|---|
@@ -120,8 +126,9 @@ the table has 15 rows. Where two lenses gave the same problem different severiti
 
 ### What the skeptics rejected
 
-Nothing. All 42 skeptic votes said the claim stands. What the skeptics did change was the detail.
-In six problems they corrected the reviewer while keeping the finding:
+Nothing, which surprised me. All 42 skeptic votes said the claim stands. What the skeptics did
+change was the detail. In six problems they corrected the reviewer while keeping the finding, and
+those corrections are what I fixed against:
 
 | # | Reviewer said | Skeptics found |
 |---|---|---|
@@ -134,37 +141,39 @@ In six problems they corrected the reviewer while keeping the finding:
 
 ### What this review taught
 
-One design decision, "give the name no room and draw it over the row below", broke three habits
+One decision of mine, "give the name no room and draw it over the row below", broke three habits
 that had been safe for the whole life of the project: draw each name right after its icon, test
 clicks against the name's reserved box, and redraw only a fixed area around a cell. All four
-reviewers ran into the first one, which is a good sign that it was real and that it mattered. Only
+reviewers ran into the first one, which told me it was both real and worth taking seriously. Only
 two lenses saw that the visible name could not be clicked. Only the critic saw that two panel
-options had quietly become no-ops, and that no test pinned the rule the whole grid depends on. None
-of this showed up in the automated runs, and the skeptics said why: the test hook that simulates a
-hover sets the fade to its end state, and the scenario clicks aim at icons, never at names. The
-review paid for itself by reading the code the tests do not reach.
+options had quietly become no-ops, and that no test pinned the rule the whole grid depends on.
+
+None of this showed up in my automated runs, and the skeptics told me why: the test hook that
+simulates a hover sets the fade straight to its end state, and the scenario clicks aim at icons,
+never at names. The review paid for itself by reading the code my tests do not reach.
 
 ## Review 2: reveal desktop
 
 **The change.** On macOS a click on the wallpaper, F11, the spread gesture or a hot corner slides
-every window aside, and while that lasts macOS shows Finder's own desktop icons again even if they
-are hidden. The change makes the wallpaper click work through QuietDesk's layer, and makes
-QuietDesk step aside for as long as any reveal lasts, which it notices by reading the window list
-once a second because macOS sends no event.
+every window aside. While that lasts, macOS shows Finder's own desktop icons again even if they are
+hidden, so QuietDesk has to get out of the way or you see every icon twice. The change makes the
+wallpaper click work through QuietDesk's layer, and makes QuietDesk step aside for as long as any
+reveal lasts. It notices a reveal by reading the list of open windows once a second, for as long as
+it is on, because macOS sends no event when one starts.
 
 **The shape.** Three lenses, 11 findings, two skeptics for each finding (22), one critic: 26 agents.
 
 ### Problems found
 
-The 9 confirmed findings describe 8 distinct problems: two lenses reported the same test bug (row
-6), and one state-machine finding carried two problems at once, the stale README claim (row 2) and
-the timer that never pauses (row 3). The critic added three more rows.
+The 9 confirmed findings describe 8 distinct problems. Two lenses reported the same test bug (row
+6), and one state-machine finding carried two problems at once: the stale README claim (row 2) and
+the check that never pauses (row 3). The critic added three more rows.
 
 | # | Problem, in plain words | Reported by | Severity | How it was fixed |
 |---|---|---|---|---|
 | 1 | QuietDesk recognised the Dock by its display name, and that name is translated. On a Simplified Chinese, Arabic or Hebrew system the check could never match. QuietDesk would never step aside, and every wallpaper click would leave doubled icons for the whole reveal. | detection | major | The Dock is recognised by process id, looked up from its bundle identifier and looked up again after a Dock restart (`DesktopReveal.isRevealed`). |
-| 2 | The README, CONCEPTS and the checklist still promised "no timers at rest", "no polling" and a constant CPU time. An older checklist line described the opposite of the new behaviour for Show Desktop. The published idle graph was measured before the timer existed. | interaction-cost (major), state-machine (minor) | major | The idle cost was measured again (experiment E15 in [FEASIBILITY.md](../FEASIBILITY.md)). The README and CONCEPTS section 11 now describe the once-a-second look at the window list, and the idle chart was redrawn from the new measurement. The old checklist line points to the new "Reveal desktop" section. Still open: the README's flags table does not list `--with-reveal`. |
-| 3 | The once-a-second check never paused, not even with the displays asleep or the session switched out, when no reveal can start. | state-machine | minor | The timer stops on display sleep and when the session is switched out. On wake, or when the session returns, it is re-armed and one check runs at once (`startWatching()`). |
+| 2 | The README, CONCEPTS and the checklist still promised "no timers at rest", "no polling" and a constant CPU time. An older checklist line described the opposite of the new behaviour for Show Desktop. The published idle graph was measured before the timer existed. | interaction-cost (major), state-machine (minor) | major | The idle cost was measured again (experiment E15 in [FEASIBILITY.md](../FEASIBILITY.md)). The README and CONCEPTS section 11 now describe the once-a-second look at the window list, and the idle chart was redrawn from the new measurement. The old checklist line points to the new "Reveal desktop" section. The README's flags table now lists `--with-reveal` as well. |
+| 3 | The once-a-second check never paused, not even with the displays asleep or the session switched out, when no reveal can start. | state-machine | minor | Not fixed, and that is my decision rather than an oversight. I had the pause built and then took it out again: it saved almost nothing, and it added a new way to fail, because one missed wake notification would leave the check switched off and you with doubled icons. QuietDesk now looks at the window list once a second for as long as it is on, and four times a second while the desktop is revealed. What that costs is measured in experiment E15 in [FEASIBILITY.md](../FEASIBILITY.md). |
 | 4 | Stepping aside first committed a rename in progress. If the typed name could not be used, a modal alert opened from inside the timer, doubled icons stayed on screen behind it, and ordering the window out then raised the same alert a second time. | state-machine | minor | `finishRenameQuietly()`: the typed name is used if it is valid and dropped if it is not, with no alert, before the windows are ordered out. |
 | 5 | Turning QuietDesk on in the middle of a reveal put its windows on top of Finder's icons for up to a second and a half, until the first timer tick. | state-machine | nit | `startWatching()` runs `checkReveal()` immediately, so QuietDesk starts out of the way. |
 | 6 | The `--with-reveal` test round ended its reveal with a blind toggle. If the wallpaper click had not started a reveal, the toggle started one, and the test exited with every window slid aside. | state-machine (nit), detection (minor) | minor | The test toggles only when `DesktopReveal.isRevealed` is true, and its finish step also ends a reveal that is still active. |
@@ -176,7 +185,8 @@ the timer that never pauses (row 3). The critic added three more rows.
 
 ### What the skeptics rejected
 
-Two findings. In both cases both skeptics refuted them, and both gave written reasons.
+Two findings this time. In both cases both skeptics refuted the claim, and both wrote down why, so I
+could read the reasoning rather than take a verdict on trust.
 
 **"The check probably also matches Mission Control and App Exposé."** The detection reviewer argued
 that QuietDesk would step aside, and commit a rename, in Mission Control, where nothing re-shows
@@ -189,16 +199,19 @@ before shipping, which the checklist already holds, not a confirmed code defect.
 
 **"The reveal check is never suspended."** The interaction-cost reviewer argued that the timer
 keeps waking the process when no reveal can start. The skeptics agreed with the fact and refuted
-the harm. The failing checklist item is caused by the check existing at all, which is deliberate
-and documented, so suspending it would not make that item pass. By the reviewer's own measurement
-the cost is about 0.03 % of one core. The "wake-ups per day" figure could not be confirmed, because
-a sleeping machine fires no timers. The reviewer's side claim that the timer should not run in the
-run loop's common modes was wrong: a reveal can start in the middle of a drag. And a careless fix
-adds a failure: a missed wake notification would leave detection off. Both skeptics pointed at the
-real issue instead, the stale documentation, which is row 2. The state-machine lens raised the same
-fact with the README contradiction attached, and its two skeptics kept it as minor (row 3). The
-pause was then built with the rejected finding's warning in mind: waking re-arms the timer and
-checks at once.
+the harm. The checklist item that fails here fails because the check exists at all, which is a
+choice I made and documented, so suspending it would not make that item pass. By the reviewer's own
+measurement the cost is about 0.03 % of one core. The "wake-ups per day" figure could not be
+confirmed, because a machine that is asleep fires no timers at all. The reviewer's side claim that
+the timer should not run in the run loop's common modes was wrong: a reveal can start in the middle
+of a drag. And a careless fix would add a failure of its own, because one missed wake notification
+would leave detection switched off. Both skeptics pointed at the real issue instead, the stale
+documentation, which is row 2. The state-machine lens raised the same fact with the README
+contradiction attached, and its two skeptics kept it as minor (row 3).
+
+I sided with the skeptics in the end. QuietDesk keeps looking at the window list for as long as it
+is on, and instead of trying to be clever about when to stop, I had the idle cost measured again and
+the claims in the README and CONCEPTS rewritten to say what the app actually does.
 
 Skeptics also narrowed four confirmed findings:
 
@@ -212,20 +225,25 @@ Skeptics also narrowed four confirmed findings:
 ### What this review taught
 
 The most serious problem cannot be seen on any system where the Dock is called "Dock", which
-includes every English one. Testing on such a system would never have shown it. It was found
-because the detection lens named the suspect in advance (is the Dock's owner name the same in every
-language?) and the reviewer went and read the Dock's own translation table. The second lesson is that a change can be right in
-code and still break a promise somewhere else. "No timers at rest" was a measured claim in the
-README, and this change made it false; the third lens was asked to list every statement the change
-makes false, and it did. The third lesson came from the critic: the change gave the wallpaper click
-something new to do, so a detection failure became more costly than before the change. That is
-what led to the session fail-safe and the menu switch. A smaller pattern showed up in the test and
-again in an experiment script: an entry point that toggles was treated as if it meant "end the
-reveal".
+includes every English one. No amount of testing on such a system would have shown it, mine
+included. It was found because the detection lens named the suspect in advance, in the form of a
+question: is the Dock's owner name the same in every language? The reviewer then went and read the
+Dock's own translation table.
+
+The second lesson is that a change can be right in code and still break a promise somewhere else.
+"No timers at rest" was a measured claim in my README, and this change made it false. I had asked
+the third lens to list every statement the change makes false, and it did.
+
+The third lesson came from the critic. The change gave the wallpaper click something new to do, so
+a detection failure suddenly cost more than it used to. That is what led me to add the fail-safe
+that gives up for the rest of the session, and the menu switch that turns the whole thing off. A
+smaller pattern showed up twice, in the test and again in an experiment script: an entry point that
+toggles was treated as if it meant "end the reveal".
 
 ## The pattern
 
-What makes this workflow shape work, in order of how much it mattered here:
+If you take one thing from this page, take this list. It is what I would tell anyone who wanted to
+run the same kind of review, in the order of how much each part mattered here.
 
 - **Review the diff, not the project.** The target is one change. Everything an agent needs fits in
   one shared context: what the change does, which facts were measured, and which promises it must
@@ -247,18 +265,18 @@ What makes this workflow shape work, in order of how much it mattered here:
   that had become no-ops, a missing test, a missing off-switch, an experiment script that misled.
 - **Structured answers.** Every role returns a fixed set of fields, so results can be counted,
   merged and turned into tables like the ones above without rereading transcripts.
-- **Read-only rails.** No agent may change a file, run the app or slide the person's windows about.
-  The review can run on a working machine while the author keeps working.
+- **Read-only rails.** No agent may change a file, run the app or slide my windows about. That is
+  what let the review run on my own machine while I carried on working on it.
 - **Before the commit, not after.** The fixes land in the same commit as the feature, and the
   commit message lists what the review found. The history never contains the broken version.
 
-Limits, stated plainly: skeptics read code and run small probes; they do not use the app. Claims
-about live system behaviour (Mission Control, Stage Manager, one click that both activates Finder
-and reveals) stay on the hand checklist. Critic items are not verified by skeptics. And a review
-with nothing rejected, like the first one, is a reason to read the skeptics' corrections closely,
-not a reason to skip them.
+The limits, stated plainly. The skeptics read code and run small probes. They never use the app, so
+anything that can only be seen live stays on my hand checklist: Mission Control, Stage Manager, one
+click that both brings Finder forward and reveals the desktop. Critic items go into the fix list
+without a skeptic checking them. And a review where nothing was rejected, like the first one here,
+is a reason to read the skeptics' corrections closely, not a reason to skip them.
 
-Related: [code-review.md](code-review.md) for the whole-codebase review that used one verifier per
-claim, [PROMPTS.md](../PROMPTS.md) for the prompt designs, [FEASIBILITY.md](../FEASIBILITY.md) for
-experiments E14 and E15, and [VALIDATION-CHECKLIST.md](../VALIDATION-CHECKLIST.md) for the hand
-checks that remain.
+Related: [code-review.md](code-review.md) for the whole-codebase review, which used one verifier per
+claim instead of two, [PROMPTS.md](../PROMPTS.md) for the prompts I gave each role,
+[FEASIBILITY.md](../FEASIBILITY.md) for experiments E14 and E15, and
+[VALIDATION-CHECKLIST.md](../VALIDATION-CHECKLIST.md) for the checks I still run by hand.

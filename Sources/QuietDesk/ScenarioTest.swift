@@ -29,6 +29,10 @@ final class ScenarioTest {
     private var revealToggles = 0
     private var revealClock: TimeInterval = 1000
     private var pendingReveal: [(due: TimeInterval, body: () -> Void)] = []
+    /// How much time passed that the round's clock did not see, the way a sleep does: the delayed
+    /// blocks wait on a clock that stops, so they run at wake with the world much older than they
+    /// think. Rounds add to this to sleep the Mac without sleeping the Mac.
+    private var revealSleepOffset: TimeInterval = 0
 
     init(controller: OverlayController) {
         self.controller = controller
@@ -100,6 +104,35 @@ final class ScenarioTest {
     private func tickReveal() {
         readReveal()
         drainReveal()
+    }
+
+    /// Puts the simulated reveal in place of the real one: nothing asks the Dock, no window on
+    /// this screen moves, and the delays are the round's own clock. The clock carries on from the
+    /// round before. The person's own wallpaper-click preference is put back afterwards.
+    private var revealSettingWas = false
+    private func installRevealSeams() {
+        revealSettingWas = Settings.shared.revealDesktopOnWallpaperClick
+        Settings.shared.revealDesktopOnWallpaperClick = true
+        revealed = false; pendingReveal = []; revealSleepOffset = 0
+        controller.revealProbe = { [self] in revealed }
+        controller.revealToggle = { [self] in revealToggles += 1; return true }
+        controller.revealGestureEnabled = { true }
+        controller.revealAfter = { [self] delay, body in pendingReveal.append((revealClock + delay, body)) }
+        controller.revealNow = { [self] in revealClock }
+        controller.revealSleepProofNow = { [self] in revealClock + revealSleepOffset }
+        controller.revealOnWallpaperClick = true
+    }
+
+    private func removeRevealSeams() {
+        controller.revealOnWallpaperClick = false
+        controller.revealProbe = { DesktopReveal.isRevealed }
+        controller.revealToggle = { DesktopReveal.toggle() }
+        controller.revealGestureEnabled = { DesktopReveal.clickRevealsDesktop }
+        controller.revealAfter = { delay, body in DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: body) }
+        controller.revealNow = { ProcessInfo.processInfo.systemUptime }
+        controller.revealSleepProofNow = { TimeInterval(clock_gettime_nsec_np(CLOCK_MONOTONIC)) / 1_000_000_000 }
+        Settings.shared.revealDesktopOnWallpaperClick = revealSettingWas
+        pendingReveal = []; revealSleepOffset = 0
     }
 
     private func expect(_ condition: Bool, _ message: @autoclosure () -> String) {
@@ -413,50 +446,108 @@ final class ScenarioTest {
             Settings.shared.revealDesktopOnWallpaperClick = settingWas
             pendingReveal = []
         }))
-        // Checks are suspended while the displays sleep. A follow-up check left over from a click
-        // just before must not move windows, judge the request, or start the timer again.
-        steps.append(("no reveal checks while the displays sleep", { [self] in
-            round = "displays asleep"
-            let settingWas = Settings.shared.revealDesktopOnWallpaperClick
-            Settings.shared.revealDesktopOnWallpaperClick = true
-            revealed = false; pendingReveal = []      // the clock carries on from the round before
-            controller.revealProbe = { [self] in revealed }
-            controller.revealToggle = { [self] in revealToggles += 1; return true }
-            controller.revealGestureEnabled = { true }
-            controller.revealAfter = { [self] delay, body in pendingReveal.append((revealClock + delay, body)) }
-            controller.revealNow = { [self] in revealClock }
-            controller.revealOnWallpaperClick = true
+        // Detection must survive a sleep whose wake notification never arrives, which is how it was
+        // lost for a whole session once. Sleep is only posted here, never asked for: nothing
+        // in this round puts the Mac or its displays to sleep.
+        steps.append(("reveal checks survive a sleep with no wake", { [self] in
+            round = "sleep with no wake"
+            installRevealSeams()
             let wc = NSWorkspace.shared.notificationCenter
 
-            clickWallpaper()
+            // A sleep, no wake afterwards, then a wallpaper click. The reveal must still be noticed.
             wc.post(name: NSWorkspace.screensDidSleepNotification, object: nil)
-            drainReveal()                                // nothing was revealed and nothing may judge that
-            expect(!controller.revealUnseen, "a request left over from before sleep must not turn the feature off")
+            let before = revealToggles
             clickWallpaper()
-            revealed = true                              // nothing can reveal the desktop now, but be sure
-            drainReveal()
-            expect(!controller.steppedAside, "no follow-up check should move windows while the displays sleep")
-            revealed = false
-            wc.post(name: NSWorkspace.screensDidWakeNotification, object: nil)
+            expect(revealToggles == before + 1, "a wallpaper click after a sleep should still ask for a reveal")
             revealed = true
-            tickReveal()
-            expect(controller.steppedAside, "checks should run again once the displays wake")
+            runPendingReveal(1)
+            expect(controller.steppedAside, "after a sleep with no wake, the reveal a wallpaper click asks for must still be noticed")
+            expect(controller.revealTimerIsLive, "a wallpaper click should leave the reveal check running")
+            revealed = false
+            readReveal(); drainReveal()
+            expect(!controller.steppedAside, "QuietDesk should come back when that reveal ends")
+
+            // The checks a click queues answer to nothing but a QuietDesk that has been turned off.
+            clickWallpaper()
+            controller.killRevealTimerForTesting(forget: true)
+            revealed = true
+            runPendingReveal(1)
+            expect(controller.steppedAside, "the checks a wallpaper click queues must work with no timer at all")
+            revealed = false
+            readReveal(); drainReveal()
+            expect(!controller.steppedAside, "QuietDesk should come back after that one too")
+
+            // A check killed behind the controller's back: a click starts it again.
+            controller.revealOnWallpaperClick = false        // this click only has to heal the timer
+            controller.killRevealTimerForTesting(forget: false)
+            expect(!controller.revealTimerIsLive, "the test hook should leave the reveal check dead")
+            clickWallpaper()
+            expect(controller.revealTimerIsLive, "a click on the desktop should start a dead reveal check again")
+
+            // Waking starts it again too, and looks at once: a reveal may have begun meanwhile.
+            controller.killRevealTimerForTesting(forget: true)
+            revealed = true
+            wc.post(name: NSWorkspace.didWakeNotification, object: nil)
+            expect(controller.revealTimerIsLive, "waking the Mac should start the reveal check again")
+            expect(controller.steppedAside, "a reveal already on screen at wake should be noticed at once")
+            revealed = false
+            readReveal(); drainReveal()
+            expect(!controller.steppedAside, "QuietDesk should come back when that reveal ends")
+            controller.killRevealTimerForTesting(forget: true)
+            wc.post(name: NSWorkspace.screensDidWakeNotification, object: nil)
+            expect(controller.revealTimerIsLive, "waking the displays should start the reveal check again")
+
+            // Switching to another account, or the lock screen, leaves this session with nothing
+            // drawn: what the check reads there says nothing about what the person will see. The
+            // moment this session is in front again, the desktop is read afresh.
+            controller.killRevealTimerForTesting(forget: true)
+            revealed = true
+            wc.post(name: NSWorkspace.sessionDidBecomeActiveNotification, object: nil)
+            expect(controller.revealTimerIsLive, "coming back to this session should start the reveal check again")
+            expect(controller.steppedAside, "a reveal on screen when this session comes back should be noticed at once")
+            revealed = false
+            readReveal(); drainReveal()
+            expect(!controller.steppedAside, "QuietDesk should come back when that reveal ends")
+            controller.revealOnWallpaperClick = true
+        }))
+        // The one delayed check that decides something: the verdict on whether the reveal a click
+        // asked for ever appeared. A sleep in between holds it until the Mac wakes, and it then
+        // looks at a desktop an hour older than the click. It must not judge the click on that.
+        steps.append(("a wallpaper click the Mac slept through", { [self] in
+            round = "slept through a click"
+            let before = revealToggles
+            clickWallpaper()
+            expect(revealToggles == before + 1, "a wallpaper click should ask for a reveal")
+            revealSleepOffset += 3600            // an hour asleep before any of the checks can run
+            revealed = false                     // and no reveal on screen by the time they do
+            drainReveal()
+            expect(!controller.revealUnseen, "a verdict that only ran after a long sleep must not switch wallpaper-click reveal off")
+            clickWallpaper()
+            expect(revealToggles == before + 2, "wallpaper clicks should still ask for a reveal after that")
+            revealed = true; tickReveal()
+            expect(controller.steppedAside, "and that reveal should still be noticed")
+            revealed = false; tickReveal(); drainReveal()
+            expect(!controller.steppedAside && !controller.revealUnseen, "QuietDesk should come back with the feature still on")
+        }))
+        // A reveal started by F11 or the gesture after that same sleep: nothing asks for it and no
+        // click follows, so only the repeating check can find it. This one waits on the real timer.
+        steps.append(("a reveal starting on its own after a sleep", { [self] in
+            round = "sleep with no wake"
+            NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.screensDidSleepNotification, object: nil)
+            revealed = true
+        }))
+        for _ in 0..<12 { steps.append(("waiting for the check to notice", {})) }
+        steps.append(("the check noticed it", { [self] in
+            expect(controller.steppedAside, "the repeating check should notice a reveal that starts on its own after a sleep")
+            expect(controller.windows.allSatisfy { !$0.isVisible }, "no icon window should be on screen during that reveal")
             revealed = false
             tickReveal()
-            expect(!controller.steppedAside && controller.windows.contains { $0.isVisible }, "QuietDesk should be back on screen after that")
-
-            controller.revealOnWallpaperClick = false
-            controller.revealProbe = { DesktopReveal.isRevealed }
-            controller.revealToggle = { DesktopReveal.toggle() }
-            controller.revealGestureEnabled = { DesktopReveal.clickRevealsDesktop }
-            controller.revealAfter = { delay, body in DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: body) }
-            controller.revealNow = { ProcessInfo.processInfo.systemUptime }
-            Settings.shared.revealDesktopOnWallpaperClick = settingWas
-            pendingReveal = []
+            expect(!controller.steppedAside && controller.windows.contains { $0.isVisible }, "QuietDesk should be back on screen after it")
+            removeRevealSeams()
         }))
         if withReveal {
             // The real thing (opt-in: it slides every window aside for about three seconds).
-            // Two cycles, and the second one is ended quickly, which is how the owner met the bug.
+            // Two cycles, and the second one is ended quickly, which is how the bug first showed up.
             for cycle in 1...2 {
                 steps.append(("reveal \(cycle): wallpaper click", { [self] in
                     round = "reveal desktop \(cycle)"
@@ -485,10 +576,22 @@ final class ScenarioTest {
         }
         steps.append(("finish", { [self] in
             if withReveal, DesktopReveal.isRevealed { DesktopReveal.toggle() }   // never leave the windows slid aside
+            // Turned off: a wake or a click must leave a stopped QuietDesk alone.
+            round = "after Turn Off"
+            controller.revealOnWallpaperClick = false        // nothing here may ask the real Dock
+            controller.stop()
+            expect(!controller.revealTimerIsLive, "stop() should end the reveal check")
+            let wc = NSWorkspace.shared.notificationCenter
+            wc.post(name: NSWorkspace.didWakeNotification, object: nil)
+            wc.post(name: NSWorkspace.screensDidWakeNotification, object: nil)
+            wc.post(name: NSWorkspace.sessionDidBecomeActiveNotification, object: nil)
+            controller.surfaceWallpaperClicked()
+            controller.surfaceDidReceiveClick()
+            expect(!controller.revealTimerIsLive, "a wake or a click must not start the reveal check on a QuietDesk that is off")
             print("scenario test: \(checks) checks, \(failures.count) failed")
             for f in failures { print("  - \(f)") }
             print(failures.isEmpty ? "ALL PASSED" : "FAILED")
-            controller.stop()
+            Settings.removeScenarioSuite()   // pass or fail, leave no plist behind
             exit(failures.isEmpty ? 0 : 1)
         }))
         run(0)
