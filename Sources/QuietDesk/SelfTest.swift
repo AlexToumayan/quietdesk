@@ -149,6 +149,36 @@ enum SelfTest {
         let pdf = DesktopItem(url: URL(fileURLWithPath: "/tmp/a.pdf"), name: "a.pdf", isFolder: false, isVolume: false, isPackage: false, isAlias: false, dateAdded: now, dateModified: now, dateCreated: now, dateLastOpened: now, size: 1, kind: "PDF", contentType: .pdf, tags: [], isUbiquitous: false)
         check("kind category for PDF", DesktopModel.kindCategory(pdf) == "PDF Documents")
 
+        // Command line: an unknown flag must print the usage text instead of launching the app,
+        // and a value that follows a flag must never be read as a flag of its own.
+        check("an unknown flag is refused", LaunchGuard.check(["QuietDesk", "--bogus-flag"]) == .unknown("--bogus-flag"))
+        check("--help and -h ask for the usage text", LaunchGuard.check(["QuietDesk", "--help"]) == .help && LaunchGuard.check(["QuietDesk", "-h"]) == .help)
+        check("a plain launch is accepted", LaunchGuard.check(["QuietDesk"]) == .ok)
+        check("a value after a flag is not read as a flag", LaunchGuard.check(["QuietDesk", "--render", "--odd.png", "--expand", "--odd"]) == .ok)
+        check("a Cocoa setting and the arguments macOS passes are left alone",
+              LaunchGuard.check(["QuietDesk", "-labelMode", "hover", "-psn_0_1234", "-NSDocumentRevisionsDebugMode", "YES"]) == .ok)
+        let documented = ["--self-test", "--dump-layout", "--render", "--hover", "--expand", "--render-view-options",
+                          "--dark", "--render-status-item", "--icon-candidates", "--scenario-test", "--with-reveal",
+                          "--desktop-dir", "--defaults-suite", "--test-seconds", "--no-hide", "--hit-test", "--debug-log"]
+        check("every flag the code reads is a known flag", documented.allSatisfy { LaunchGuard.check(["QuietDesk", $0]) == .ok })
+        check("the usage text lists every one of them", documented.allSatisfy { LaunchGuard.usage.contains($0) })
+
+        // Single instance: only a run that would hide the desktop in the person's own preferences
+        // refuses to start beside a running copy. The tests and tools must not.
+        check("a plain launch is a normal run", LaunchGuard.isNormalMode(["QuietDesk"]) && LaunchGuard.isNormalMode(["QuietDesk", "--debug-log"]))
+        check("a run that exits on its own may start beside the app",
+              !LaunchGuard.isNormalMode(["QuietDesk", "--self-test"]) && !LaunchGuard.isNormalMode(["QuietDesk", "--dump-layout"])
+              && !LaunchGuard.isNormalMode(["QuietDesk", "--render", "/tmp/x.png"]))
+        check("a scenario test may start beside the app", !LaunchGuard.isNormalMode(["QuietDesk", "--scenario-test"]))
+        check("another preferences domain may start beside the app",
+              !LaunchGuard.isNormalMode(["QuietDesk", "--test-seconds", "40", "--defaults-suite", "dev.quietdesk.measure"]))
+        check("the usual preferences domain is still a normal run",
+              LaunchGuard.isNormalMode(["QuietDesk", "--defaults-suite", LaunchGuard.bundleIdentifier]))
+        check("the executable is recognised in the bundle and in .build",
+              LaunchGuard.isQuietDeskExecutable("/A/QuietDesk.app/Contents/MacOS/QuietDesk")
+              && LaunchGuard.isQuietDeskExecutable("/A/.build/release/QuietDesk")
+              && !LaunchGuard.isQuietDeskExecutable("/A/QuietDeskHelper"))
+
         print(failures == 0 ? "ALL PASSED" : "\(failures) FAILED")
         return failures == 0 ? 0 : 1
     }

@@ -15,7 +15,7 @@ changed.
 *The same desktop, before and after. On the right the names are gone, except the one that has faded
 in for the item under the pointer.*
 
-**Status: version 1.0.0. Every feature is built. Everything a program can check for itself is
+**Status: version 1.0.1. Every feature is built. Everything a program can check for itself is
 covered by the automated tests, and I am still working through the checklist I run by hand, in
 [docs/VALIDATION-CHECKLIST.md](docs/VALIDATION-CHECKLIST.md).** The mechanism was proven and
 measured on macOS 26.6.2, the full set of desktop interactions is implemented and code-reviewed,
@@ -138,8 +138,12 @@ included. It does that for anyone who hides desktop items, not just for QuietDes
 steps aside for as long as the reveal lasts and comes back when it ends.
 
 The wallpaper click uses the Dock's own entry point for Show Desktop, which is not a published part
-of macOS. QuietDesk looks it up when it starts, and if it is missing, or a reveal it asked for never
-appears, wallpaper clicks quietly go back to only deselecting. The menu has a switch for the whole
+of macOS. QuietDesk looks it up when it is needed. If it is missing, wallpaper clicks quietly go back
+to only deselecting. The same happens if three reveals in a row that QuietDesk asked for never
+appear, which would mean it can no longer see reveals and would be leaving doubled icons on screen.
+One miss is not enough: the Dock sometimes ignores a request during a burst of clicks, and I found
+that out by hammering on my own wallpaper. As soon as QuietDesk sees any reveal again, the click
+comes back. The menu has a switch for the whole
 behaviour (Click Wallpaper to Reveal Desktop).
 
 ## Everything the desktop still does
@@ -296,8 +300,8 @@ The whole trail is in this repository, deliberately. It is as much the point as 
 - `.build/release/QuietDesk --scenario-test --defaults-suite dev.quietdesk.scenario` drives the real
   overlay windows with synthesized clicks (Stack expand/collapse, member clicks, double-click open,
   wallpaper clicks) before and after every View Options change, with Finder brought forward between
-  clicks as on the real desktop; about 580 checks across some thirty rounds (View Options, compact and Finder
-  grids, manual layout, label modes, activation states, repeated reveals, a sleep with no wake), exit status 0 when all pass. CI runs it against a
+  clicks as on the real desktop; about 650 checks across some thirty rounds (View Options, compact and Finder
+  grids, manual layout, label modes, activation states, repeated reveals, a sleep with no wake, bursts of fast clicks), exit status 0 when all pass. CI runs it against a
   fixture folder (`--desktop-dir`). It uses a private preferences suite and never hides the native
   desktop.
 - `scripts/measure-idle.sh 60` reproduces the idle measurement under Performance (without a number it runs for 40 s). It is the real thing: Finder's desktop icons are hidden for the run and put back when it ends, so leave the mouse alone. The first time, macOS may ask your terminal app for access to the Desktop folder. It prints CPU %, memory in MB and total CPU time every 5 s.
@@ -308,6 +312,7 @@ Run the bare executable, `.build/release/QuietDesk`:
 
 | Flag | Effect |
 |---|---|
+| `--help` | Prints every flag with one line of explanation. An unknown flag prints the same list instead of starting the app. |
 | `--self-test` | Runs the pure-logic checks (layout geometry, manual layout, stack buckets, ordering, naming) and exits. |
 | `--dump-layout` | Prints the computed grid (screen, column, row, icon centre, kind, name) without showing anything. |
 | `--render out.png [--hover N] [--expand "Stack"] [-labelMode always\|hover\|hidden]` | Renders the main display's overlay to a PNG over a flat background. |

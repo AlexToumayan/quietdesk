@@ -75,6 +75,22 @@ final class ScenarioTest {
         send(.leftMouseUp, window: shield, at: p, clickCount: 1)
     }
 
+    /// Moves the clock on by `gap`, running every captured follow-up check that falls due on the
+    /// way, and then clicks. That is how a steady rhythm of clicks really arrives: the re-checks and
+    /// the verdict a click schedules run in the gaps between clicks, not in a batch at the end.
+    private func clickWallpaperInRhythm(after gap: TimeInterval) {
+        let target = revealClock + gap
+        while let i = pendingReveal.indices
+            .filter({ pendingReveal[$0].due <= target })
+            .min(by: { pendingReveal[$0].due < pendingReveal[$1].due }) {
+            let item = pendingReveal.remove(at: i)
+            revealClock = max(revealClock, item.due)
+            item.body()
+        }
+        revealClock = target
+        clickWallpaper(after: 0)
+    }
+
     /// Runs the next captured follow-up check, earliest first, moving the clock to when it is due.
     private func runNextPendingReveal() {
         guard let i = pendingReveal.indices.min(by: { pendingReveal[$0].due < pendingReveal[$1].due }) else { return }
@@ -418,22 +434,30 @@ final class ScenarioTest {
             revealed = true; tickReveal(); revealed = false; tickReveal()
             expect(!controller.steppedAside, "QuietDesk should be back after that reveal")
 
+            // Reveals that never appear: the fail safe. One miss is weak evidence, so it takes
+            // three in a row (with no reveal seen in between) to switch wallpaper clicks off.
             drainReveal()
             let beforeFailSafe = revealToggles
-            clickWallpaper()                            // a reveal that never appears: fail safe
-            expect(revealToggles == beforeFailSafe + 1, "a wallpaper click should still ask for a reveal")
-            drainReveal()
-            expect(controller.revealUnseen, "a reveal that is never seen should stop wallpaper clicks asking")
+            for strike in 1...3 {
+                clickWallpaper()                        // a reveal that never appears
+                expect(revealToggles == beforeFailSafe + strike, "wallpaper click \(strike) should still ask for a reveal")
+                drainReveal()
+                expect(controller.revealMisses == strike, "an unobserved reveal should count as strike \(strike)")
+                expect(controller.revealUnseen == (strike == 3), strike == 3
+                       ? "three unobserved reveals in a row should stop wallpaper clicks asking"
+                       : "\(strike) unobserved reveal(s) must not stop wallpaper clicks asking")
+            }
             clickWallpaper()
-            expect(revealToggles == beforeFailSafe + 1, "after that, a wallpaper click should only deselect")
+            expect(revealToggles == beforeFailSafe + 3, "after that, a wallpaper click should only deselect")
             revealed = true                             // a reveal seen later (F11) shows it does work
             tickReveal()
             expect(!controller.revealUnseen, "seeing a reveal should let wallpaper clicks ask again")
+            expect(controller.revealMisses == 0, "seeing a reveal should put the strike count back to 0")
             revealed = false
             tickReveal()
             expect(!controller.steppedAside, "QuietDesk should come back at the end of that reveal")
             clickWallpaper()
-            expect(revealToggles == beforeFailSafe + 2, "a wallpaper click should ask for a reveal again")
+            expect(revealToggles == beforeFailSafe + 4, "a wallpaper click should ask for a reveal again")
             revealed = true; tickReveal(); revealed = false; tickReveal()
             expect(!controller.steppedAside && controller.windows.contains { $0.isVisible }, "QuietDesk should be back on screen at the end of the round")
 
@@ -445,6 +469,140 @@ final class ScenarioTest {
             controller.revealNow = { ProcessInfo.processInfo.systemUptime }
             Settings.shared.revealDesktopOnWallpaperClick = settingWas
             pendingReveal = []
+        }))
+        // A request the Dock simply does not act on. It happens after a burst of clicks, when the
+        // Dock is probably still finishing the previous un-reveal: nothing is revealed, so nothing
+        // is doubled, and the next click must just ask again. Three misses in a row with no reveal
+        // in between is the only pattern worth switching the feature off for.
+        steps.append(("the Dock ignores a request", { [self] in
+            round = "ignored requests"
+            installRevealSeams()
+            var dockAnswers = true                      // a fake Dock that really toggles the reveal
+            controller.revealToggle = { [self] in
+                revealToggles += 1
+                if dockAnswers { revealed.toggle() }
+                return true
+            }
+
+            // A burst: a reveal, ended by one of the clicks that reach the system while QuietDesk
+            // is stepped aside, then a request the Dock ignores, then a plain click that must still
+            // ask for a reveal and get one.
+            clickWallpaper()
+            runPendingReveal(1)
+            expect(controller.steppedAside, "the first click's reveal should be noticed")
+            revealed = false                            // a click that reached the system ended it
+            readReveal(); drainReveal()
+            expect(!controller.steppedAside, "QuietDesk should come back when that reveal ends")
+            expect(controller.revealMisses == 0, "a reveal that was seen should leave no strikes behind")
+
+            dockAnswers = false
+            var before = revealToggles
+            clickWallpaper()
+            expect(revealToggles == before + 1, "the click after a burst should ask for a reveal")
+            drainReveal()
+            expect(controller.revealMisses == 1, "a request the Dock ignored should be strike 1")
+            expect(!controller.revealUnseen, "one ignored request must not switch wallpaper-click reveal off")
+
+            dockAnswers = true
+            before = revealToggles
+            clickWallpaper()
+            expect(revealToggles == before + 1, "the click after an ignored request should ask again")
+            drainReveal()
+            expect(controller.steppedAside, "and that reveal should be noticed")
+            expect(controller.revealMisses == 0, "seeing it should clear the strike")
+            revealed = false
+            tickReveal()
+            expect(!controller.steppedAside, "QuietDesk should come back after it")
+
+            // Two ignored, a reveal that works, two more ignored: never three in a row, so the
+            // feature stays on the whole way through.
+            dockAnswers = false
+            clickWallpaper(); drainReveal()
+            clickWallpaper(); drainReveal()
+            expect(controller.revealMisses == 2, "two ignored requests should be two strikes")
+            expect(!controller.revealUnseen, "two ignored requests must not switch the feature off")
+            dockAnswers = true
+            clickWallpaper(); drainReveal()
+            expect(controller.revealMisses == 0, "a reveal in between should put the strikes back to 0")
+            revealed = false; tickReveal()
+            dockAnswers = false
+            clickWallpaper(); drainReveal()
+            clickWallpaper(); drainReveal()
+            expect(controller.revealMisses == 2, "the two after that reveal should count from 0 again")
+            expect(!controller.revealUnseen, "two misses, a reveal, then two more must leave the feature on")
+
+            // No entry point at all is a certain failure, not a miss: it switches off on the spot.
+            controller.revealToggle = { [self] in revealToggles += 1; return false }
+            before = revealToggles
+            clickWallpaper()
+            expect(revealToggles == before + 1, "a wallpaper click should still try the entry point")
+            expect(controller.revealUnseen, "an unavailable entry point should switch wallpaper-click reveal off at once")
+            clickWallpaper()
+            expect(revealToggles == before + 1, "after that, a wallpaper click should only deselect")
+
+            // Leave the feature on and QuietDesk on screen for the rounds that follow.
+            revealed = true; tickReveal()
+            expect(!controller.revealUnseen, "a reveal seen later should switch it back on")
+            revealed = false; tickReveal()
+            expect(!controller.steppedAside && controller.windows.contains { $0.isVisible }, "QuietDesk should be back on screen at the end of the round")
+            removeRevealSeams()
+        }))
+        // Clicks in a steady rhythm: slower than a double click, so every one of them is a plain
+        // click that asks for a reveal, but close enough that each request has another one within
+        // the verdict delay of it. No single request in such a run can be judged, so the strikes
+        // never move. Nothing reveals here, which is what a reveal that no read can see looks like
+        // from inside QuietDesk: the run has to end by itself, after a bounded number of requests.
+        steps.append(("wallpaper clicks in a steady rhythm", { [self] in
+            round = "steady rhythm"
+            installRevealSeams()
+            controller.revealToggle = { [self] in revealToggles += 1; return true }
+
+            let before = revealToggles
+            var asked = 0
+            var clicks = 0
+            while !controller.revealUnseen, clicks < 24 {
+                clicks += 1
+                clickWallpaperInRhythm(after: 0.8)
+                if controller.revealUnseen { break }   // the run ended as this click arrived
+                asked += 1
+                expect(revealToggles == before + asked, "click \(asked) of a steady rhythm should ask for a reveal")
+                expect(controller.revealMisses == 0, "a request with another one close to it must not score a strike")
+                expect(controller.revealUnjudged == asked - 2 || asked < 3, "each cancelled request should join the unjudged run")
+            }
+            drainReveal()
+            expect(controller.revealUnseen, "a rhythm of requests with no reveal seen for any of them should switch the wallpaper click off")
+            expect(asked <= 10, "it should do that after a small, bounded number of requests (asked \(asked))")
+            expect(controller.revealMisses == 0, "and without a single strike, since no request in the run could be judged")
+            let afterOff = revealToggles
+            clickWallpaperInRhythm(after: 0.8)
+            expect(revealToggles == afterOff, "once it is off, a wallpaper click should only deselect")
+
+            // Any reveal at all, however it started, switches it back on and empties both counts.
+            revealed = true
+            tickReveal()
+            expect(!controller.revealUnseen, "a reveal seen later should switch the wallpaper click back on")
+            expect(controller.revealUnjudged == 0, "and put the run of unjudged requests back to 0")
+            revealed = false
+            tickReveal()
+            expect(!controller.steppedAside, "QuietDesk should come back at the end of that reveal")
+
+            // A judged request ends the run: two cancelled requests, then one on its own that is a
+            // plain strike, and the unjudged count starts again from nothing.
+            clickWallpaper(after: 2.0)
+            clickWallpaperInRhythm(after: 0.6)
+            drainReveal()
+            expect(controller.revealUnjudged == 2, "two requests that cancel each other should leave a run of 2")
+            expect(controller.revealMisses == 0, "neither of them should be a strike")
+            clickWallpaper(after: 3.0)
+            drainReveal()
+            expect(controller.revealMisses == 1, "a request with nothing near it should be judged, and missing it is a strike")
+            expect(controller.revealUnjudged == 0, "and a judged request should end the unjudged run")
+            expect(!controller.revealUnseen, "one strike must not switch the wallpaper click off")
+
+            revealed = true; tickReveal(); revealed = false; tickReveal()
+            expect(!controller.revealUnseen && controller.revealMisses == 0, "a reveal at the end should leave the feature on with no strikes")
+            expect(!controller.steppedAside && controller.windows.contains { $0.isVisible }, "QuietDesk should be back on screen at the end of the round")
+            removeRevealSeams()
         }))
         // Detection must survive a sleep whose wake notification never arrives, which is how it was
         // lost for a whole session once. Sleep is only posted here, never asked for: nothing

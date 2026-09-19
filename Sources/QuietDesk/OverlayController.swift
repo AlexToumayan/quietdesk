@@ -451,7 +451,17 @@ final class OverlayController: DesktopSurfaceDelegate {
         DebugLog.log(revealed ? "desktop revealed: stepping aside" : "reveal ended: coming back")
         if revealed {
             revealsObserved += 1
-            revealUnseen = false                     // reveals are visible after all
+            // Reveals are visible after all: the strikes go back to zero, and if the feature had
+            // been switched off (three strikes, or an entry point that was missing) it comes back.
+            if revealUnseen {
+                DebugLog.log("reveal observed: wallpaper-click reveal is on again")
+                log.notice("a reveal was observed; wallpaper clicks ask for one again")
+            } else if revealMisses > 0 || revealUnjudged > 0 {
+                DebugLog.log("reveal observed: counts back to 0 (strikes \(revealMisses), unjudged \(revealUnjudged))")
+            }
+            revealUnseen = false
+            revealMisses = 0
+            revealUnjudged = 0
             // macOS is showing Finder's own items now; ours on top would be doubles. A rename in
             // progress ends quietly first: no alert from inside a timer, and no second commit when
             // ordering the key window out makes it resign key.
@@ -465,11 +475,34 @@ final class OverlayController: DesktopSurfaceDelegate {
         }
     }
 
-    /// Set when a reveal we asked for never showed up in the window list: either the Dock ignored
-    /// the request or the detection no longer matches this macOS. Revealing without being able to
-    /// step aside would leave doubled icons, so wallpaper clicks stop asking until a reveal is
-    /// seen again (one started with F11 or the gesture clears it).
+    /// Set when requested reveals keep failing to show up in the window list, which would mean the
+    /// detection no longer matches this macOS. Revealing without being able to step aside would
+    /// leave doubled icons, so wallpaper clicks stop asking until a reveal is seen again (one
+    /// started with F11 or the gesture clears it).
     private(set) var revealUnseen = false
+
+    /// Requests in a row whose reveal was never seen. One miss on its own means very little: after
+    /// a burst of clicks the Dock sometimes does not act on a toggle at all, probably because it is
+    /// still finishing the previous un-reveal. Nothing appears on screen when that happens, so
+    /// nothing is doubled and the only cost is a click that did nothing. Detection that has really
+    /// stopped working misses every request, so three in a row is the signal worth acting on. Any
+    /// observed reveal, however it started, puts this back to zero.
+    private(set) var revealMisses = 0
+    private let revealMissesAllowed = 3
+
+    /// Requests that could not be judged at all, in a row, with no reveal seen anywhere among them.
+    /// A request is left unjudged when another click came within the verdict delay on either side of
+    /// it: the entry point is a toggle, so two requests that close together can cancel each other,
+    /// and neither of them can say whether reveals work. That is right for each request on its own,
+    /// but it leaves a gap: clicks in a steady rhythm a little slower than a double click are all
+    /// plain clicks, yet each one's verdict is cancelled by the next, so the strikes can never move.
+    /// If detection ever stopped matching this macOS, that rhythm would go on doubling icons for as
+    /// long as the person kept clicking. A long run of requests that no read ever saw a reveal for is
+    /// evidence in its own right, whether or not any single one of them can be judged. Six of them in
+    /// a row switches the click off, the same as three plain strikes does, and any observed reveal
+    /// puts this back to zero. It costs one integer and no timer.
+    private(set) var revealUnjudged = 0
+    private let revealUnjudgedAllowed = 6
 
     /// Test seams for the request path: what asks the Dock for a reveal, whether the system
     /// gesture is on, and how the follow-up checks are delayed.
@@ -510,7 +543,14 @@ final class OverlayController: DesktopSurfaceDelegate {
         let seen = revealsObserved
         let sent = revealToggle()
         DebugLog.log("wallpaper click -> show desktop (\(sent ? "sent" : "entry point unavailable"))")
-        guard sent else { revealUnseen = true; return }
+        // No entry point at all is a different, certain failure: there is nothing to retry and no
+        // amount of clicking will change it, so the feature goes off straight away.
+        guard sent else {
+            revealUnseen = true
+            log.notice("the Dock's Show Desktop entry point is unavailable; wallpaper clicks will only deselect")
+            DebugLog.log("show desktop entry point unavailable: wallpaper-click reveal off for this session")
+            return
+        }
         // A click that follows another one closely cancels the reveal that one asked for, before
         // any read can see it. Neither request tells us anything then, so neither gets a verdict.
         let now = revealNow()
@@ -528,12 +568,32 @@ final class OverlayController: DesktopSurfaceDelegate {
                 DebugLog.log("reveal verdict skipped: it ran long after the click (the Mac slept in between)")
                 return
             }
-            // Only when no reveal at all was seen since this click, and nothing is being revealed
-            // now, and no other click asked around the same time (which makes the state ambiguous).
-            guard !overlapped, self.revealsObserved == seen, !self.steppedAside, self.revealRequests == requests else { return }
+            // A reveal seen since this click, or one on screen right now, settles the matter: the
+            // click worked. `checkReveal` has already put both counts back to zero.
+            guard self.revealsObserved == seen, !self.steppedAside else { return }
+            // Another click asked around the same time, so this one cannot be judged on its own:
+            // the two requests may have cancelled each other. It still goes on the run of requests
+            // that nothing was ever seen for, which is the only thing that can end such a rhythm.
+            if overlapped || self.revealRequests != requests {
+                self.revealUnjudged += 1
+                DebugLog.log("reveal request too close to another to judge, \(self.revealUnjudged) of \(self.revealUnjudgedAllowed) in a row with no reveal seen")
+                guard self.revealUnjudged >= self.revealUnjudgedAllowed else { return }
+                self.revealUnseen = true
+                self.log.notice("\(self.revealUnjudgedAllowed) reveal requests in a row went unjudged with no reveal seen; wallpaper clicks will only deselect until a reveal is seen or QuietDesk is turned off and on")
+                DebugLog.log("\(self.revealUnjudgedAllowed) reveal requests in a row, no reveal seen for any of them: wallpaper-click reveal off for this session")
+                return
+            }
+            // A miss, not a failure. Nothing was revealed, so nothing is doubled and there is
+            // nothing to undo; the next plain click simply asks again. Asking again on a timer
+            // would be worse than useless: the entry point is a toggle, so a second request could
+            // reveal the desktop and hide it again. The person's next click is the retry.
+            self.revealUnjudged = 0      // this one was judged, so the run of unjudged ones ends here
+            self.revealMisses += 1
+            DebugLog.log("requested reveal not observed, strike \(self.revealMisses) of \(self.revealMissesAllowed)")
+            guard self.revealMisses >= self.revealMissesAllowed else { return }
             self.revealUnseen = true
-            self.log.notice("a requested reveal was never observed; wallpaper clicks will only deselect until a reveal is seen or QuietDesk is turned off and on")
-            DebugLog.log("reveal requested but never observed: wallpaper-click reveal off for this session")
+            self.log.notice("\(self.revealMissesAllowed) requested reveals in a row were never observed; wallpaper clicks will only deselect until a reveal is seen or QuietDesk is turned off and on")
+            DebugLog.log("\(self.revealMissesAllowed) requested reveals in a row never observed: wallpaper-click reveal off for this session")
         }
     }
 

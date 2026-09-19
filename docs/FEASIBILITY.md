@@ -146,7 +146,7 @@ one. The last item is not about Apple: it is what happens if QuietDesk itself st
 - Finder's grid formula differs from the calibration for other icon sizes or text sizes: icons would be offset from where Finder draws them when the utility is disabled. Cosmetic; the order stays correct.
 - Transparent-window hit-testing regressions (reported for 26.3 RC and a 26.4 beta on the Apple forums [forum-814798]): clicks might not reach the overlay, or might pass through. The setting is still restored on quit.
 - Apple renames or removes the Dock's private Show Desktop entry point: wallpaper clicks go back to only deselecting. Nothing else changes.
-- Apple changes the window the Dock shows while the desktop is revealed: QuietDesk would stop noticing reveals, so F11 and the gesture would show doubled icons for as long as the desktop is revealed. Recovery: Turn QuietDesk Off.
+- Apple changes the window the Dock shows while the desktop is revealed: QuietDesk would stop noticing reveals, so F11 and the gesture would show doubled icons for as long as the desktop is revealed. Recovery: Turn QuietDesk Off. Wallpaper clicks protect themselves: after three requested reveals in a row that QuietDesk never sees (or six that it cannot judge because the clicks came too fast), it stops asking the Dock, and it starts again as soon as it sees any reveal. One unseen reveal is not counted as proof, because the Dock sometimes ignores a request during a burst of clicks; in 1.0.0 a single miss switched the click off for the session, which I hit by clicking the wallpaper fast.
 - Crash or force-quit: the durable record restores the setting on next launch; manual recovery is a single `defaults delete`.
 
 ## 7. Status after milestone 2

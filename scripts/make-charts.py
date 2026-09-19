@@ -42,7 +42,7 @@ def glance():
     tiles = [
         ("+0.05 s", "CPU time added, 50 s idle", "one 1 ms window check per second"),
         ("84 MB", "resident memory, stable", "±0.2 MB across the run"),
-        ("643 / 643", "automated checks passing", "17 XCTest + 43 self-test + 583 scenario"),
+        ("719 / 719", "automated checks passing", "17 XCTest + 56 self-test + 646 scenario"),
         ("41 caught", "problems found by adversarial review", "three reviews, each problem listed with its fix"),
     ]
     b = [text(20, 30, "QuietDesk: results at a glance", 16, INK, weight="600")]

@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.0.1 (2026-09-19)
+
+- Fixed: clicking the wallpaper fast switched the reveal off for the rest of the session. After a
+  burst of clicks the Dock sometimes ignores one request to show the desktop, probably because it is
+  still finishing the last one. Nothing was revealed and nothing was doubled, but QuietDesk took that
+  single miss as proof that it can no longer see reveals, and stopped asking. It now takes three
+  misses in a row, with no reveal seen in between, and any reveal you get puts the count back to
+  zero. A missed request is not retried on a timer: the entry point is a toggle, so asking twice
+  could reveal the desktop and hide it again. Your next click is the retry. If the Dock's entry point
+  is missing altogether, that still switches the click off at once, because there is nothing to
+  retry. The debug log now says which strike a miss is, and says plainly when the click is switched
+  off and when it comes back.
+- Fixed: clicking the wallpaper in a steady rhythm could keep that safety net from ever working.
+  Two clicks close together can cancel each other out, because the entry point is a toggle, so
+  QuietDesk judges neither of them. At a pace a little slower than a double click, every click was
+  cancelled by the next one, and the count could never move. That is the one pace that would have
+  gone on showing doubled icons for as long as I kept clicking, if QuietDesk ever lost the ability
+  to see reveals. Six requests in a row that no reveal was seen for now switch the click off on
+  their own, and any reveal puts it back on.
+- Fixed: QuietDesk no longer starts a second copy of itself, and a flag it does not know now prints
+  the list of flags instead of launching the app. Running the bare executable with `--help` while
+  the app was running started a whole second copy, because `--help` meant nothing to it. Both copies
+  share one set of settings. The new copy found the record the running one had saved to undo its
+  change to the desktop setting, read it as the leftovers of a crash, put Finder's icons back and
+  cleared the record. I was left with doubled icons and nothing to restore. Two copies opened from
+  two different folders would have done the same. A normal launch now looks for a copy that is
+  already running, the app or the bare executable, and stops with one line on the command line
+  before it reads or writes anything. `--help` and `-h` print the flags and exit; any other unknown
+  flag prints them and exits with an error. The tests and the developer flags still run while the
+  app is running, because they either finish on their own or keep their settings in a domain of
+  their own.
+
 ## 1.0.0 (2026-09-19)
 
 The first version I call finished. Everything since 0.9.1, in plain words: the desktop can be packed

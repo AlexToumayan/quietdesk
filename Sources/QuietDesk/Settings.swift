@@ -152,8 +152,8 @@ final class Settings {
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--defaults-suite"), i + 1 < args.count, let d = UserDefaults(suiteName: args[i + 1]) { return d }
         // Inside the bundle this IS the standard domain; the bare executable (no bundle id) uses the same one.
-        if Bundle.main.bundleIdentifier == "dev.quietdesk.QuietDesk" { return .standard }
-        return UserDefaults(suiteName: "dev.quietdesk.QuietDesk") ?? .standard
+        if Bundle.main.bundleIdentifier == LaunchGuard.bundleIdentifier { return .standard }
+        return UserDefaults(suiteName: LaunchGuard.bundleIdentifier) ?? .standard
     }()
     /// Throws away a scenario-test run's private domain, so no plist is left behind in
     /// ~/Library/Preferences. Does nothing in any other mode.
