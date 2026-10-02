@@ -22,6 +22,9 @@ for one job, given one set of instructions, and finished.
 
 **Start here:** [concepts](CONCEPTS.md) → [the brief](BRIEF.md) → [feasibility](FEASIBILITY.md) → [prompt library](PROMPTS.md) → evidence ([research](evidence/research.md), [experiments](../experiments/README.md), [modules](evidence/modules.md), [code review](evidence/code-review.md)) → [validation checklist](VALIDATION-CHECKLIST.md).
 
+For the product in use, see the [screenshot gallery](SCREENSHOTS.md). It includes the original PNG
+captures of the desktop states, menu-bar controls and desktop context menu.
+
 ## 1. What the brief asked for, and why it worked as a prompt
 
 The [brief](BRIEF.md) I wrote is a product document, not a feature list, and that is why it worked.

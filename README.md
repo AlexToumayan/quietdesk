@@ -10,10 +10,14 @@ changed.
 
 | Before | After |
 |---|---|
-| ![A desktop where every icon has its name written underneath](docs/assets/demo-before.png) | ![The same desktop with QuietDesk on: no names under the icons, and one name showing on a pill](docs/assets/demo-after.png) |
+| ![A crowded desktop with file and folder names visible](docs/assets/screenshots/preview/labels-visible-detail.webp) | ![The same desktop with QuietDesk on: icons remain and only one name is shown](docs/assets/screenshots/preview/labels-on-hover-detail.webp) |
 
 *The same desktop, before and after. On the right the names are gone, except the one that has faded
 in for the item under the pointer.*
+
+[See the full screenshot gallery](docs/SCREENSHOTS.md) for the clear desktop, both label states,
+the menu-bar controls and the desktop context menu. Each image has a link to its original,
+full-resolution PNG capture in this repository.
 
 **Status: version 1.0.1. Every feature is built. Everything a program can check for itself is
 covered by the automated tests, and I am still working through the checklist I run by hand, in
