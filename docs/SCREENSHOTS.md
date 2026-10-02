@@ -13,7 +13,7 @@ two frames easy to see.
 
 ![A clear Mac desktop showing an illustrated mountain wallpaper](assets/screenshots/preview/clear-desktop.webp)
 
-[Open the original PNG](assets/screenshots/original/clear-desktop.png)
+[Open the original PNG](https://raw.githubusercontent.com/AlexToumayan/quietdesk/main/docs/assets/screenshots/original/clear-desktop.png)
 
 ### Items and labels visible
 
@@ -21,7 +21,7 @@ The same desktop, with its files and folders visible and their names shown benea
 
 ![A crowded Mac desktop with visible file and folder labels](assets/screenshots/preview/labels-visible.webp)
 
-[Open the original PNG](assets/screenshots/original/labels-visible.png)
+[Open the original PNG](https://raw.githubusercontent.com/AlexToumayan/quietdesk/main/docs/assets/screenshots/original/labels-visible.png)
 
 ### QuietDesk on
 
@@ -30,7 +30,7 @@ in this capture.
 
 ![The same Mac desktop with QuietDesk hiding labels except for one hovered item](assets/screenshots/preview/labels-on-hover.webp)
 
-[Open the original PNG](assets/screenshots/original/labels-on-hover.png)
+[Open the original PNG](https://raw.githubusercontent.com/AlexToumayan/quietdesk/main/docs/assets/screenshots/original/labels-on-hover.png)
 
 ## Controls in context
 
@@ -42,7 +42,7 @@ Item Labels is unavailable in this captured state because desktop items are hidd
 
 ![QuietDesk's menu-bar controls](assets/screenshots/preview/menu-bar-controls.webp)
 
-[Open the original PNG](assets/screenshots/original/menu-bar-controls.png)
+[Open the original PNG](https://raw.githubusercontent.com/AlexToumayan/quietdesk/main/docs/assets/screenshots/original/menu-bar-controls.png)
 
 ### Desktop context menu
 
@@ -52,7 +52,7 @@ the original PNG contains the entire desktop.
 
 ![QuietDesk's desktop context menu over the illustrated wallpaper](assets/screenshots/preview/desktop-context-menu.webp)
 
-[Open the full original PNG](assets/screenshots/original/desktop-context-menu.png)
+[Open the full original PNG](https://raw.githubusercontent.com/AlexToumayan/quietdesk/main/docs/assets/screenshots/original/desktop-context-menu.png)
 
 For behavior beyond these still images, see the [full feature inventory](../README.md#everything-the-desktop-still-does),
 [known limitations](../README.md#known-limitations), and [hands-on validation checklist](VALIDATION-CHECKLIST.md).
